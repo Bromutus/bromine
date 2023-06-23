@@ -18,6 +18,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.random.Random
 
 object Txt2Img {
     const val COMMAND_NAME = "txt2img"
@@ -204,7 +205,7 @@ object Txt2Img {
                 width = width ?: Defaults.WIDTH,
                 height = height ?: Defaults.HEIGHT,
                 nIter = count ?: Defaults.COUNT,
-                seed = seed,
+                seed = seed ?: Random.nextInt(from = 0, until = Int.MAX_VALUE),
                 samplerName = Defaults.SAMPLER_NAME,
                 steps = steps ?: Defaults.STEPS,
                 cfgScale = cfg ?: Defaults.CFG,
@@ -222,27 +223,27 @@ object Txt2Img {
             if (response.images.isEmpty()) {
                 throw Txt2ImgException(response.error)
             }
+            val mainParams = mutableMapOf<String, String>()
+            mainParams["Prompt"] = prompt ?: ""
+            if (negativePrompt != null) mainParams["Negative prompt"] = negativePrompt
+            mainParams["Size"] = "${request.width}x${request.height}"
+            mainParams["Seed"] = "${request.seed}"
+            val otherParams = mutableMapOf<String, String>()
+            otherParams["Steps"] = "${request.steps}"
+            otherParams["CFG"] = "${request.cfgScale}"
+            if (hiresFactor != null) {
+                otherParams["Hires factor"] = "$hiresFactor"
+                otherParams["Hires steps"] = "${hiresSteps ?: request.steps}"
+                otherParams["Hires denoising"] = "${request.denoisingStrength}"
+            }
             val hasMultipleImages = response.images.size > 1
             initialResponse.edit {
                 embeds?.clear()
                 embed {
                     title = "Generation completed."
-                    description = """
-                        **Prompt**: $prompt
-                        **Negative prompt**: $negativePrompt
-                        **Size**: ${request.width}x${request.height}
-                        ${if (seed != null) "**Seed**: $seed" else ""}
-                    """.trimIndent()
+                    description = mainParams.map { "**${it.key}**: ${it.value}" }.joinToString("\n")
                     footer {
-                        text = """
-                            Steps: ${request.steps},
-                            CFG: ${request.cfgScale},
-                            ${if (hiresFactor != null) """
-                                Hires factor: $hiresFactor,
-                                Hires steps: ${hiresSteps ?: request.steps},
-                                Hires denoising: ${request.denoisingStrength}
-                            """.trimIndent().replace("\n", " ") else ""}
-                        """.trimIndent().replace("\n", " ")
+                        text = otherParams.map { "${it.key}: ${it.value}" }.joinToString(", ")
                     }
                     color = Color(0x33ee33)
                 }
@@ -255,7 +256,6 @@ object Txt2Img {
                     }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
             initialResponse.edit {
                 embeds?.clear()
                 embed {
@@ -268,6 +268,7 @@ object Txt2Img {
                             else -> e.message
                         }
                     } else {
+                        e.printStackTrace()
                         "Unknown error."
                     }
                     color = Color(0xff0000)
