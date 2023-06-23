@@ -6,6 +6,7 @@ val dotenv_version: String by project
 plugins {
     kotlin("jvm") version "1.8.22"
     kotlin("plugin.serialization") version "1.8.22"
+    id("com.github.johnrengelman.shadow") version "7.1.2"
     application
 }
 
@@ -27,4 +28,12 @@ dependencies {
     implementation("io.ktor:ktor-client-content-negotiation:$ktor_version")
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktor_version")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
+}
+
+tasks {
+    jar {
+        manifest {
+            attributes["Main-Class"] = "at.bromutus.bromine.AppKt"
+        }
+    }
 }
