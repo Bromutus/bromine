@@ -1,6 +1,7 @@
 package at.bromutus.bromine.commands
 
 import at.bromutus.bromine.AppColors
+import at.bromutus.bromine.Txt2ImgCommandConfig
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
 import at.bromutus.bromine.sdclient.SDClient
@@ -20,11 +21,13 @@ import io.ktor.utils.io.*
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
+import kotlin.random.nextUInt
 
 private val logger = KotlinLogging.logger {}
 
 class Txt2Img(
     private val client: SDClient,
+    private val config: Txt2ImgCommandConfig,
 ) : ChatInputCommand {
     override val name = "txt2img"
     override val description = "Generate an image from text"
@@ -41,20 +44,6 @@ class Txt2Img(
         const val HIRES_FACTOR = "hires-factor"
         const val HIRES_STEPS = "hires-steps"
         const val HIRES_DENOISING = "hires-denoising"
-    }
-
-    private object Defaults {
-        const val CHECKPOINT_NAME = "bd2150_calico25_03"
-        const val NEGATIVE_PROMPT = "bad-picture-chill-75v, easynegative"
-        const val WIDTH = 512
-        const val HEIGHT = 512
-        const val COUNT = 1
-        const val SAMPLER_NAME = "DPM++ SDE Karras"
-        const val STEPS = 20
-        const val CFG = 7.0
-        const val HIRES_DENOISING = 0.7
-        const val HIRES_STEPS = 0
-        const val HIRES_UPSCALER = "Latent"
     }
 
     override suspend fun buildCommand(builder: ChatInputCreateBuilder) {
@@ -81,34 +70,34 @@ class Txt2Img(
                 name = OptionNames.WIDTH,
                 description = """
                     Width of the generated image in pixels (before hires-fix).
-                    Default: ${Defaults.WIDTH}.
+                    Default: ${config.width.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 1
-                maxValue = 4096
+                minValue = config.width.min.toLong()
+                maxValue = config.width.max.toLong()
             }
             integer(
                 name = OptionNames.HEIGHT,
                 description = """
                     Height of the generated image in pixels (before hires-fix).
-                    Default: ${Defaults.HEIGHT}.
+                    Default: ${config.height.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 1
-                maxValue = 4096
+                minValue = config.height.min.toLong()
+                maxValue = config.height.max.toLong()
             }
             integer(
                 name = OptionNames.COUNT,
                 description = """
                     Number of images to generate.
-                    Default: ${Defaults.COUNT}.
+                    Default: ${config.count.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 1
-                maxValue = 9
+                minValue = config.count.min.toLong()
+                maxValue = config.count.max.toLong()
             }
             integer(
                 name = OptionNames.SEED,
@@ -123,24 +112,24 @@ class Txt2Img(
                 name = OptionNames.STEPS,
                 description = """
                     Number of diffusion steps.
-                    Default: ${Defaults.STEPS}.
+                    Default: ${config.steps.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 1
-                maxValue = 40
+                minValue = config.steps.min.toLong()
+                maxValue = config.steps.max.toLong()
             }
             number(
                 name = OptionNames.CFG,
                 description = """
                     Classifier-free guidance.
                     High values increase guidance, but may lead to artifacts.
-                    Default: ${Defaults.CFG}.
+                    Default: ${config.cfg.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 1.0
-                maxValue = 30.0
+                minValue = config.cfg.min
+                maxValue = config.cfg.max
             }
             number(
                 name = OptionNames.HIRES_FACTOR,
@@ -149,30 +138,30 @@ class Txt2Img(
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 1.0
-                maxValue = 8.0
+                minValue = config.hiresFactor.min
+                maxValue = config.hiresFactor.max
             }
             integer(
                 name = OptionNames.HIRES_STEPS,
                 description = """
                     Number of diffusion steps for hires-fix (0 = same as steps).
-                    Default: ${Defaults.HIRES_STEPS}.
+                    Default: ${config.hiresSteps.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 0
-                maxValue = 40
+                minValue = config.hiresSteps.min.toLong()
+                maxValue = config.hiresSteps.max.toLong()
             }
             number(
                 name = OptionNames.HIRES_DENOISING,
                 description = """
                     Denoising strength for hires-fix.
-                    Default: ${Defaults.HIRES_DENOISING}.
+                    Default: ${config.hiresDenoising.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 0.0
-                maxValue = 1.0
+                minValue = config.hiresDenoising.min
+                maxValue = config.hiresDenoising.max
             }
         }
     }
@@ -189,38 +178,36 @@ class Txt2Img(
 
         try {
             val command = interaction.command
+
             val prompt = command.strings[OptionNames.PROMPT]
-                ?: throw Exception("No prompt specified")
             val negativePrompt = command.strings[OptionNames.NEGATIVE_PROMPT]
-            val actualNegativePrompt = if (negativePrompt != null) {
-                "${Defaults.NEGATIVE_PROMPT}, $negativePrompt"
-            } else {
-                Defaults.NEGATIVE_PROMPT
-            }
-            val width = command.integers[OptionNames.WIDTH]?.toInt()
-                ?: Defaults.WIDTH
-            val height = command.integers[OptionNames.HEIGHT]?.toInt()
-                ?: Defaults.HEIGHT
-            val count = command.integers[OptionNames.COUNT]?.toInt()
-                ?: Defaults.COUNT
-            val seed = command.integers[OptionNames.SEED]?.toInt()
-                ?: Random.nextInt(from = 0, until = Int.MAX_VALUE)
-            val samplerName = Defaults.SAMPLER_NAME
-            val steps = command.integers[OptionNames.STEPS]?.toInt()
-                ?: Defaults.STEPS
+            val width = command.integers[OptionNames.WIDTH]?.toUInt()
+                ?: config.width.default
+            val height = command.integers[OptionNames.HEIGHT]?.toUInt()
+                ?: config.height.default
+            val count = command.integers[OptionNames.COUNT]?.toUInt()
+                ?: config.count.default
+            val seed = command.integers[OptionNames.SEED]?.toUInt()
+                ?: Random.nextUInt()
+            val samplerName = config.samplerDefault
+            val steps = command.integers[OptionNames.STEPS]?.toUInt()
+                ?: config.steps.default
             val cfg = command.numbers[OptionNames.CFG]
-                ?: Defaults.CFG
+                ?: config.cfg.default
             val hiresFactor = command.numbers[OptionNames.HIRES_FACTOR]
-            val hiresUpscaler = Defaults.HIRES_UPSCALER
-            val hiresSteps = command.integers[OptionNames.HIRES_STEPS]?.toInt()
-                ?: Defaults.HIRES_STEPS
+                ?: config.hiresFactor.default
+            val hiresUpscaler = config.hiresUpscalerDefault
+            val hiresSteps = command.integers[OptionNames.HIRES_STEPS]?.toUInt()
+                ?: config.hiresSteps.default
             val hiresDenoising = command.numbers[OptionNames.HIRES_DENOISING]
-                ?: Defaults.HIRES_DENOISING
-            val checkpointName = Defaults.CHECKPOINT_NAME
+                ?: config.hiresDenoising.default
+            val checkpointName = config.defaultCheckpoint
 
             val params = Txt2ImgParams(
-                prompt = prompt,
-                negativePrompt = actualNegativePrompt,
+                prompt = listOfNotNull(config.promptAlwaysInclude, prompt)
+                    .joinToString(", "),
+                negativePrompt = listOfNotNull(config.negativePromptAlwaysInclude, negativePrompt)
+                    .joinToString(", "),
                 width = width,
                 height = height,
                 count = count,
@@ -238,7 +225,7 @@ class Txt2Img(
             val response = client.txt2img(params)
 
             val mainParams = mutableMapOf<String, String>()
-            mainParams["Prompt"] = prompt
+            if (prompt != null) mainParams["Prompt"] = prompt
             if (negativePrompt != null) mainParams["Negative prompt"] = negativePrompt
             mainParams["Size"] = "${width}x${height}"
             mainParams["Seed"] = "$seed"
@@ -246,7 +233,7 @@ class Txt2Img(
             val otherParams = mutableMapOf<String, String>()
             otherParams["Steps"] = "$steps"
             otherParams["CFG"] = "$cfg"
-            if (hiresFactor != null) {
+            if (hiresFactor > 1.0) {
                 otherParams["Hires factor"] = "$hiresFactor"
                 otherParams["Hires steps"] = "$hiresSteps"
                 otherParams["Hires denoising"] = "$hiresDenoising"
@@ -271,7 +258,7 @@ class Txt2Img(
                     color = AppColors.success
                 }
                 images.forEachIndexed { index, img ->
-                    addFile("${seed + index}.png", ChannelProvider {
+                    addFile("${seed + index.toUInt()}.png", ChannelProvider {
                         ByteReadChannel(Base64.decode(img))
                     })
                 }

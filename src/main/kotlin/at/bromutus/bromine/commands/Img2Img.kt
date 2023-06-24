@@ -1,6 +1,7 @@
 package at.bromutus.bromine.commands
 
 import at.bromutus.bromine.AppColors
+import at.bromutus.bromine.Img2ImgCommandConfig
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
 import at.bromutus.bromine.sdclient.Img2ImgParams
@@ -23,11 +24,13 @@ import io.ktor.utils.io.core.*
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
+import kotlin.random.nextUInt
 
 private val logger = KotlinLogging.logger {}
 
 class Img2Img(
     private val client: SDClient,
+    private val config: Img2ImgCommandConfig,
 ) : ChatInputCommand {
     override val name = "img2img"
     override val description = "Generate an image from another image"
@@ -45,20 +48,6 @@ class Img2Img(
         const val STEPS = "steps"
         const val CFG = "cfg"
         const val DISPLAY_SOURCE = "display-source"
-    }
-
-    private object Defaults {
-        const val CHECKPOINT_NAME = "bd2150_calico25_03"
-        const val NEGATIVE_PROMPT = "bad-picture-chill-75v, easynegative"
-        const val WIDTH = 512
-        const val HEIGHT = 512
-        const val COUNT = 1
-        const val DENOISING_STRENGTH = 0.6
-        val RESIZE_MODE = ResizeMode.Crop
-        const val SAMPLER_NAME = "DPM++ SDE Karras"
-        const val STEPS = 20
-        const val CFG = 7.0
-        const val DISPLAY_SOURCE = true
     }
 
     private fun ResizeMode.resizeModeText() = when (this) {
@@ -99,52 +88,52 @@ class Img2Img(
             integer(
                 name = OptionNames.WIDTH,
                 description = """
-                    Width of the generated image in pixels.
-                    Default: ${Defaults.WIDTH}.
+                    Width of the generated image in pixels (0 = same as original).
+                    Default: ${config.width.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 1
-                maxValue = 4096
+                minValue = config.width.min.toLong()
+                maxValue = config.width.max.toLong()
             }
             integer(
                 name = OptionNames.HEIGHT,
                 description = """
-                    Height of the generated image in pixels.
-                    Default: ${Defaults.HEIGHT}.
+                    Height of the generated image in pixels (0 = same as original).
+                    Default: ${config.height.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 1
-                maxValue = 4096
+                minValue = config.height.min.toLong()
+                maxValue = config.height.max.toLong()
             }
             integer(
                 name = OptionNames.COUNT,
                 description = """
                     Number of images to generate.
-                    Default: ${Defaults.COUNT}.
+                    Default: ${config.count.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 1
-                maxValue = 9
+                minValue = config.count.min.toLong()
+                maxValue = config.count.max.toLong()
             }
             number(
                 name = OptionNames.DENOISING_STRENGTH,
                 description = """
                     Denoising strength. Lower values preserve more of the original image.
-                    Default: ${Defaults.DENOISING_STRENGTH}.
+                    Default: ${config.denoisingStrength.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 0.0
-                maxValue = 1.0
+                minValue = config.denoisingStrength.min
+                maxValue = config.denoisingStrength.max
             }
             integer(
                 name = OptionNames.RESIZE_MODE,
                 description = """
                     Resize mode.
-                    Default: ${Defaults.RESIZE_MODE.resizeModeText()}.
+                    Default: ${ResizeMode.fromUInt(config.resizeModeDefault)!!.resizeModeText()}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
@@ -165,30 +154,30 @@ class Img2Img(
                 name = OptionNames.STEPS,
                 description = """
                     Number of diffusion steps.
-                    Default: ${Defaults.STEPS}.
+                    Default: ${config.steps.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 1
-                maxValue = 30
+                minValue = config.steps.min.toLong()
+                maxValue = config.steps.max.toLong()
             }
             number(
                 name = OptionNames.CFG,
                 description = """
                     Classifier-free guidance.
                     High values increase guidance, but may lead to artifacts.
-                    Default: ${Defaults.CFG}.
+                    Default: ${config.cfg.default}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = 1.0
-                maxValue = 30.0
+                minValue = config.cfg.min
+                maxValue = config.cfg.max
             }
             boolean(
                 name = OptionNames.DISPLAY_SOURCE,
                 description = """
                     Whether to display the source image as thumbnail in the output.
-                    Default: ${Defaults.DISPLAY_SOURCE}.
+                    Default: ${config.displaySourceImageDefault}.
                     """.trimIndent().replace("\n", " ")
             )
         }
@@ -207,8 +196,7 @@ class Img2Img(
         try {
             val command = interaction.command
 
-            val attachment = command.attachments[OptionNames.IMAGE]
-                ?: throw Exception("No image specified")
+            val attachment = command.attachments[OptionNames.IMAGE]!!
             if (!attachment.isImage || attachment.contentType == null) {
                 throw Exception("Image must be an image")
             }
@@ -217,38 +205,45 @@ class Img2Img(
 
             val prompt = command.strings[OptionNames.PROMPT]
             val negativePrompt = command.strings[OptionNames.NEGATIVE_PROMPT]
-            val actualNegativePrompt = if (negativePrompt != null) {
-                "${Defaults.NEGATIVE_PROMPT}, $negativePrompt"
-            } else {
-                Defaults.NEGATIVE_PROMPT
-            }
-            val width = command.integers[OptionNames.WIDTH]?.toInt()
-                ?: Defaults.WIDTH
-            val height = command.integers[OptionNames.HEIGHT]?.toInt()
-                ?: Defaults.HEIGHT
-            val count = command.integers[OptionNames.COUNT]?.toInt()
-                ?: Defaults.COUNT
+            val width = command.integers[OptionNames.WIDTH]?.toUInt()
+                ?.let {
+                    if (it == 0u) attachment.width?.toUInt()
+                        ?.coerceIn(config.width.min, config.width.max)
+                    else it
+                }
+                ?: config.width.default
+            val height = command.integers[OptionNames.HEIGHT]?.toUInt()
+                ?.let {
+                    if (it == 0u) attachment.height?.toUInt()
+                        ?.coerceIn(config.height.min, config.height.max)
+                    else it
+                }
+                ?: config.height.default
+            val count = command.integers[OptionNames.COUNT]?.toUInt()
+                ?: config.count.default
             val denoisingStrength = command.numbers[OptionNames.DENOISING_STRENGTH]
-                ?: Defaults.DENOISING_STRENGTH
+                ?: config.denoisingStrength.default
             val resizeMode = command.integers[OptionNames.RESIZE_MODE]
-                ?.let { ResizeMode.fromInt(it.toInt()) }
-                ?: Defaults.RESIZE_MODE
-            val seed = command.integers[OptionNames.SEED]?.toInt()
-                ?: Random.nextInt(from = 0, until = Int.MAX_VALUE)
-            val samplerName = Defaults.SAMPLER_NAME
-            val steps = command.integers[OptionNames.STEPS]?.toInt()
-                ?: Defaults.STEPS
+                ?.let { ResizeMode.fromUInt(it.toUInt()) }
+                ?: ResizeMode.fromUInt(config.resizeModeDefault)!!
+            val seed = command.integers[OptionNames.SEED]?.toUInt()
+                ?: Random.nextUInt()
+            val samplerName = config.samplerDefault
+            val steps = command.integers[OptionNames.STEPS]?.toUInt()
+                ?: config.steps.default
             val cfg = command.numbers[OptionNames.CFG]
-                ?: Defaults.CFG
-            val checkpointName = Defaults.CHECKPOINT_NAME
+                ?: config.cfg.default
+            val checkpointName = config.checkpointDefault
 
             val displaySource = command.booleans[OptionNames.DISPLAY_SOURCE]
-                ?: Defaults.DISPLAY_SOURCE
+                ?: config.displaySourceImageDefault
 
             val params = Img2ImgParams(
                 image = image,
-                prompt = prompt,
-                negativePrompt = actualNegativePrompt,
+                prompt = listOfNotNull(config.promptAlwaysInclude, prompt)
+                    .joinToString(", "),
+                negativePrompt = listOfNotNull(config.negativePromptAlwaysInclude, negativePrompt)
+                    .joinToString(", "),
                 width = width,
                 height = height,
                 count = count,
@@ -299,7 +294,7 @@ class Img2Img(
                     color = AppColors.success
                 }
                 images.forEachIndexed { index, img ->
-                    addFile("${seed + index}.png", ChannelProvider {
+                    addFile("${seed + index.toUInt()}.png", ChannelProvider {
                         ByteReadChannel(Base64.decode(img))
                     })
                 }
