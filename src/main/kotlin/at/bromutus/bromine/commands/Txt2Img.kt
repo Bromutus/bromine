@@ -12,6 +12,7 @@ import dev.kord.rest.builder.interaction.number
 import dev.kord.rest.builder.interaction.string
 import dev.kord.rest.builder.message.create.embed
 import dev.kord.rest.builder.message.modify.embed
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.request.forms.*
 import io.ktor.utils.io.*
 import kotlinx.serialization.json.JsonObject
@@ -19,6 +20,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
+
+private val logger = KotlinLogging.logger {}
 
 object Txt2Img {
     const val COMMAND_NAME = "txt2img"
@@ -214,7 +217,11 @@ object Txt2Img {
                 hrSecondPassSteps = hiresSteps ?: Defaults.HIRES_STEPS,
                 hrUpscaler = Defaults.HIRES_UPSCALER,
                 denoisingStrength = hiresDenoising ?: Defaults.HIRES_DENOISING,
-                overrideSettings = JsonObject(mapOf("sd_model_checkpoint" to JsonPrimitive(Defaults.CHECKPOINT_NAME))),
+                overrideSettings = JsonObject(
+                    mapOf(
+                        "sd_model_checkpoint" to JsonPrimitive(Defaults.CHECKPOINT_NAME),
+                    ),
+                ),
                 saveImages = true,
             )
 
@@ -261,14 +268,16 @@ object Txt2Img {
                 embed {
                     title = "Something went wrong."
                     description = if (e is Txt2ImgException) {
-                        println("Error: ${e.message} (${e.details ?: "No details"})")
+                        logger.info("Error: ${e.message}")
+                        logger.info("Details: ${e.details}")
+                        logger.info("Errors: ${e.errors}")
                         when (e.message) {
                             "OutOfMemoryError" -> "Out of memory. Please reduce the size of the requested image."
                             null -> "Unknown error."
                             else -> e.message
                         }
                     } else {
-                        e.printStackTrace()
+                        logger.error("Unknown error.", e)
                         "Unknown error."
                     }
                     color = Color(0xff0000)
@@ -278,4 +287,10 @@ object Txt2Img {
     }
 }
 
-class Txt2ImgException(message: String? = null, cause: Throwable? = null, val details: String? = null) : Exception(message, cause)
+class Txt2ImgException(
+    message: String? = null,
+    cause: Throwable? = null,
+    val details: String? = null,
+    val errors: String? = null,
+) :
+    Exception(message, cause)

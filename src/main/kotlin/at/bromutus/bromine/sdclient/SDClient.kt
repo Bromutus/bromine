@@ -1,9 +1,11 @@
 package at.bromutus.bromine.sdclient
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -11,6 +13,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+
+private val logger = KotlinLogging.logger {}
 
 fun createSDClient(baseUrl: String): SDClient {
     val httpClient = HttpClient(CIO) {
@@ -22,6 +26,12 @@ fun createSDClient(baseUrl: String): SDClient {
                 prettyPrint = true
             })
         }
+        install(Logging) {
+            logger = object : Logger {
+                override fun log(message: String) = at.bromutus.bromine.sdclient.logger.debug(message)
+            }
+            level = LogLevel.HEADERS
+        }
     }
     return SDClient(baseUrl, httpClient)
 }
@@ -32,7 +42,10 @@ class SDClient(val baseUrl: String, private val httpClient: HttpClient) {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
-        return response.body()
+        return response.body<Txt2ImgResponse>().also {
+            logger.trace("Request: $request")
+            logger.trace("Response: $it")
+        }
     }
 }
 
