@@ -1,12 +1,14 @@
 package at.bromutus.bromine.commands
 
+import at.bromutus.bromine.AppColors
+import at.bromutus.bromine.errors.logInteractionException
+import at.bromutus.bromine.errors.respondWithException
 import at.bromutus.bromine.sdclient.SDClient
-import at.bromutus.bromine.sdclient.Txt2ImgRequest
-import dev.kord.common.Color
+import at.bromutus.bromine.sdclient.Txt2ImgParams
 import dev.kord.core.behavior.interaction.respondPublic
 import dev.kord.core.behavior.interaction.response.edit
 import dev.kord.core.entity.interaction.ChatInputCommandInteraction
-import dev.kord.rest.builder.interaction.GlobalMultiApplicationCommandBuilder
+import dev.kord.rest.builder.interaction.ChatInputCreateBuilder
 import dev.kord.rest.builder.interaction.integer
 import dev.kord.rest.builder.interaction.number
 import dev.kord.rest.builder.interaction.string
@@ -15,16 +17,17 @@ import dev.kord.rest.builder.message.modify.embed
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.request.forms.*
 import io.ktor.utils.io.*
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
 
 private val logger = KotlinLogging.logger {}
 
-object Txt2Img {
-    const val COMMAND_NAME = "txt2img"
+class Txt2Img(
+    private val client: SDClient,
+) : ChatInputCommand {
+    override val name = "txt2img"
+    override val description = "Generate an image using the given parameters"
 
     private object OptionNames {
         const val PROMPT = "prompt"
@@ -54,8 +57,8 @@ object Txt2Img {
         const val HIRES_UPSCALER = "Latent"
     }
 
-    fun GlobalMultiApplicationCommandBuilder.registerTxt2ImgCommand() {
-        input(COMMAND_NAME, "Generate an image using the given parameters") {
+    override suspend fun buildCommand(builder: ChatInputCreateBuilder) {
+        builder.apply {
             string(
                 name = OptionNames.PROMPT,
                 description = """
@@ -175,75 +178,88 @@ object Txt2Img {
     }
 
     @OptIn(ExperimentalEncodingApi::class)
-    suspend fun handle(interaction: ChatInputCommandInteraction, sdClient: SDClient) {
+    override suspend fun handleInteraction(interaction: ChatInputCommandInteraction) {
         val initialResponse = interaction.respondPublic {
             embed {
                 title = "Generating..."
                 description = "Depending on the input parameters, this may take a while..."
-                color = Color(0x00cc99)
+                color = AppColors.processing
             }
         }
 
         try {
-            val prompt = interaction.command.strings[OptionNames.PROMPT]
-            val negativePrompt = interaction.command.strings[OptionNames.NEGATIVE_PROMPT]
-            val width = interaction.command.integers[OptionNames.WIDTH]?.toInt()
-            val height = interaction.command.integers[OptionNames.HEIGHT]?.toInt()
-            val count = interaction.command.integers[OptionNames.COUNT]?.toInt()
-            val seed = interaction.command.integers[OptionNames.SEED]?.toInt()
-            val steps = interaction.command.integers[OptionNames.STEPS]?.toInt()
-            val cfg = interaction.command.numbers[OptionNames.CFG]
-            val hiresFactor = interaction.command.numbers[OptionNames.HIRES_FACTOR]
-            val hiresSteps =
-                interaction.command.integers[OptionNames.HIRES_STEPS]?.toInt()
-            val hiresDenoising =
-                interaction.command.numbers[OptionNames.HIRES_DENOISING]
+            val command = interaction.command
+            val prompt = command.strings[OptionNames.PROMPT]
+                ?: throw Exception("No prompt specified")
+            val negativePrompt = command.strings[OptionNames.NEGATIVE_PROMPT]
+            val actualNegativePrompt = if (negativePrompt != null) {
+                "${Defaults.NEGATIVE_PROMPT}, $negativePrompt"
+            } else {
+                Defaults.NEGATIVE_PROMPT
+            }
+            val width = command.integers[OptionNames.WIDTH]?.toInt()
+                ?: Defaults.WIDTH
+            val height = command.integers[OptionNames.HEIGHT]?.toInt()
+                ?: Defaults.HEIGHT
+            val count = command.integers[OptionNames.COUNT]?.toInt()
+                ?: Defaults.COUNT
+            val seed = command.integers[OptionNames.SEED]?.toInt()
+                ?: Random.nextInt(from = 0, until = Int.MAX_VALUE)
+            val samplerName = Defaults.SAMPLER_NAME
+            val steps = command.integers[OptionNames.STEPS]?.toInt()
+                ?: Defaults.STEPS
+            val cfg = command.numbers[OptionNames.CFG]
+                ?: Defaults.CFG
+            val hiresFactor = command.numbers[OptionNames.HIRES_FACTOR]
+            val hiresUpscaler = Defaults.HIRES_UPSCALER
+            val hiresSteps = command.integers[OptionNames.HIRES_STEPS]?.toInt()
+                ?: Defaults.HIRES_STEPS
+            val hiresDenoising = command.numbers[OptionNames.HIRES_DENOISING]
+                ?: Defaults.HIRES_DENOISING
+            val checkpointName = Defaults.CHECKPOINT_NAME
 
-            val request = Txt2ImgRequest(
+            val params = Txt2ImgParams(
                 prompt = prompt,
-                negativePrompt = listOfNotNull(
-                    Defaults.NEGATIVE_PROMPT,
-                    negativePrompt
-                ).joinToString(", "),
-                width = width ?: Defaults.WIDTH,
-                height = height ?: Defaults.HEIGHT,
-                nIter = count ?: Defaults.COUNT,
-                seed = seed ?: Random.nextInt(from = 0, until = Int.MAX_VALUE),
-                samplerName = Defaults.SAMPLER_NAME,
-                steps = steps ?: Defaults.STEPS,
-                cfgScale = cfg ?: Defaults.CFG,
-                enableHr = hiresFactor != null && hiresFactor > 1.0,
-                hrScale = hiresFactor,
-                hrSecondPassSteps = hiresSteps ?: Defaults.HIRES_STEPS,
-                hrUpscaler = Defaults.HIRES_UPSCALER,
-                denoisingStrength = hiresDenoising ?: Defaults.HIRES_DENOISING,
-                overrideSettings = JsonObject(
-                    mapOf(
-                        "sd_model_checkpoint" to JsonPrimitive(Defaults.CHECKPOINT_NAME),
-                    ),
-                ),
-                saveImages = true,
+                negativePrompt = actualNegativePrompt,
+                width = width,
+                height = height,
+                count = count,
+                seed = seed,
+                samplerName = samplerName,
+                steps = steps,
+                cfg = cfg,
+                hiresFactor = hiresFactor,
+                hiresSteps = hiresSteps,
+                hiresUpscaler = hiresUpscaler,
+                hiresDenoising = hiresDenoising,
+                checkpointName = checkpointName,
             )
 
-            val response = sdClient.txt2img(request)
+            val response = client.txt2img(params)
 
-            if (response.images.isEmpty()) {
-                throw Txt2ImgException(response.error)
-            }
             val mainParams = mutableMapOf<String, String>()
-            mainParams["Prompt"] = prompt ?: ""
+            mainParams["Prompt"] = prompt
             if (negativePrompt != null) mainParams["Negative prompt"] = negativePrompt
-            mainParams["Size"] = "${request.width}x${request.height}"
-            mainParams["Seed"] = "${request.seed}"
+            mainParams["Size"] = "${width}x${height}"
+            mainParams["Seed"] = "$seed"
+
             val otherParams = mutableMapOf<String, String>()
-            otherParams["Steps"] = "${request.steps}"
-            otherParams["CFG"] = "${request.cfgScale}"
+            otherParams["Steps"] = "$steps"
+            otherParams["CFG"] = "$cfg"
             if (hiresFactor != null) {
                 otherParams["Hires factor"] = "$hiresFactor"
-                otherParams["Hires steps"] = "${hiresSteps ?: request.steps}"
-                otherParams["Hires denoising"] = "${request.denoisingStrength}"
+                otherParams["Hires steps"] = "$hiresSteps"
+                otherParams["Hires denoising"] = "$hiresDenoising"
             }
-            val hasMultipleImages = response.images.size > 1
+
+            val images = if (response.images.size > 1) {
+                // The first image is a grid containing all the generated images
+                // We can remove it
+                response.images.drop(1)
+            } else {
+                response.images
+            }
+
             initialResponse.edit {
                 embeds?.clear()
                 embed {
@@ -252,45 +268,18 @@ object Txt2Img {
                     footer {
                         text = otherParams.map { "${it.key}: ${it.value}" }.joinToString(", ")
                     }
-                    color = Color(0x33ee33)
+                    color = AppColors.success
                 }
-                response.images
-                    .drop(if (hasMultipleImages) 1 else 0)
-                    .forEachIndexed { index, img ->
-                        addFile("image$index.png", ChannelProvider {
-                            ByteReadChannel(Base64.decode(img))
-                        })
-                    }
+                images.forEachIndexed { index, img ->
+                    addFile("${seed + index}.png", ChannelProvider {
+                        ByteReadChannel(Base64.decode(img))
+                    })
+                }
             }
         } catch (e: Exception) {
-            initialResponse.edit {
-                embeds?.clear()
-                embed {
-                    title = "Something went wrong."
-                    description = if (e is Txt2ImgException) {
-                        logger.info("Error: ${e.message}")
-                        logger.info("Details: ${e.details}")
-                        logger.info("Errors: ${e.errors}")
-                        when (e.message) {
-                            "OutOfMemoryError" -> "Out of memory. Please reduce the size of the requested image."
-                            null -> "Unknown error."
-                            else -> e.message
-                        }
-                    } else {
-                        logger.error("Unknown error.", e)
-                        "Unknown error."
-                    }
-                    color = Color(0xff0000)
-                }
-            }
+            logger.logInteractionException(e)
+            initialResponse.respondWithException(e)
         }
     }
 }
 
-class Txt2ImgException(
-    message: String? = null,
-    cause: Throwable? = null,
-    val details: String? = null,
-    val errors: String? = null,
-) :
-    Exception(message, cause)

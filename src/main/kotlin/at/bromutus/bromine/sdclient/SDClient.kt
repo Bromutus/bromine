@@ -13,6 +13,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 private val logger = KotlinLogging.logger {}
 
@@ -37,17 +38,43 @@ fun createSDClient(baseUrl: String): SDClient {
 }
 
 class SDClient(val baseUrl: String, private val httpClient: HttpClient) {
-    suspend fun txt2img(request: Txt2ImgRequest): Txt2ImgResponse {
-        val response = httpClient.post("$baseUrl/sdapi/v1/txt2img") {
-            contentType(ContentType.Application.Json)
-            setBody(request)
+    suspend fun txt2img(params: Txt2ImgParams): Txt2ImgResponse {
+        val request = Txt2ImgRequest.create(params)
+        logger.trace("Request: $request")
+
+        val response = try {
+            httpClient.post("$baseUrl/sdapi/v1/txt2img") {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }.body<Txt2ImgResponse>()
+        } catch (e: Exception) {
+            throw SDClientException(cause = e)
         }
-        return response.body<Txt2ImgResponse>().also {
-            logger.trace("Request: $request")
-            logger.trace("Response: $it")
+        logger.trace("Response: $response")
+
+        if (response.error != null) {
+            throw SDClientException(message = response.error, details = response.detail, errors = response.errors)
         }
+        return response
     }
 }
+
+data class Txt2ImgParams(
+    val prompt: String,
+    val negativePrompt: String,
+    val width: Int,
+    val height: Int,
+    val count: Int,
+    val seed: Int,
+    val samplerName: String,
+    val steps: Int,
+    val cfg: Double,
+    val hiresFactor: Double?,
+    val hiresSteps: Int?,
+    val hiresUpscaler: String,
+    val hiresDenoising: Double,
+    val checkpointName: String,
+)
 
 @Serializable
 data class Txt2ImgRequest(
@@ -96,7 +123,32 @@ data class Txt2ImgRequest(
     @SerialName("send_images") val sendImages: Boolean? = null,
     @SerialName("save_images") val saveImages: Boolean? = null,
     @SerialName("alwayson_scripts") val alwaysOnScripts: JsonObject? = null,
-)
+) {
+    companion object {
+        fun create(params: Txt2ImgParams) = Txt2ImgRequest(
+            prompt = params.prompt,
+            negativePrompt = params.negativePrompt,
+            width = params.width,
+            height = params.height,
+            nIter = params.count,
+            seed = params.seed,
+            samplerName = params.samplerName,
+            steps = params.steps,
+            cfgScale = params.cfg,
+            enableHr = params.hiresFactor != null && params.hiresFactor > 1.0,
+            hrScale = params.hiresFactor,
+            hrSecondPassSteps = params.hiresSteps,
+            hrUpscaler = params.hiresUpscaler,
+            denoisingStrength = params.hiresDenoising,
+            overrideSettings = JsonObject(
+                mapOf(
+                    "sd_model_checkpoint" to JsonPrimitive(params.checkpointName),
+                ),
+            ),
+            saveImages = true,
+        )
+    }
+}
 
 
 @Serializable
@@ -109,3 +161,11 @@ data class Txt2ImgResponse(
     @SerialName("body") val body: String? = null,
     @SerialName("errors") val errors: String? = null,
 )
+
+class SDClientException(
+    message: String? = null,
+    cause: Throwable? = null,
+    val details: String? = null,
+    val errors: String? = null,
+) :
+    Exception(message, cause)
