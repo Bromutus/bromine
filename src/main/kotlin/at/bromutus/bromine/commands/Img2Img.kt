@@ -3,44 +3,48 @@ package at.bromutus.bromine.commands
 import at.bromutus.bromine.AppColors
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
+import at.bromutus.bromine.sdclient.Img2ImgParams
+import at.bromutus.bromine.sdclient.ResizeMode
 import at.bromutus.bromine.sdclient.SDClient
-import at.bromutus.bromine.sdclient.Txt2ImgParams
 import dev.kord.core.behavior.interaction.respondPublic
 import dev.kord.core.behavior.interaction.response.edit
 import dev.kord.core.entity.interaction.ChatInputCommandInteraction
-import dev.kord.rest.builder.interaction.ChatInputCreateBuilder
-import dev.kord.rest.builder.interaction.integer
-import dev.kord.rest.builder.interaction.number
-import dev.kord.rest.builder.interaction.string
+import dev.kord.rest.builder.interaction.*
 import dev.kord.rest.builder.message.create.embed
 import dev.kord.rest.builder.message.modify.embed
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
+import io.ktor.client.statement.*
 import io.ktor.utils.io.*
+import io.ktor.utils.io.core.*
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
 
 private val logger = KotlinLogging.logger {}
 
-class Txt2Img(
+class Img2Img(
     private val client: SDClient,
 ) : ChatInputCommand {
-    override val name = "txt2img"
-    override val description = "Generate an image from text"
+    override val name = "img2img"
+    override val description = "Generate an image from another image"
 
     private object OptionNames {
+        const val IMAGE = "image"
         const val PROMPT = "prompt"
         const val NEGATIVE_PROMPT = "negative-prompt"
         const val WIDTH = "width"
         const val HEIGHT = "height"
+        const val RESIZE_MODE = "resize-mode"
         const val COUNT = "count"
+        const val DENOISING_STRENGTH = "denoising-strength"
         const val SEED = "seed"
         const val STEPS = "steps"
         const val CFG = "cfg"
-        const val HIRES_FACTOR = "hires-factor"
-        const val HIRES_STEPS = "hires-steps"
-        const val HIRES_DENOISING = "hires-denoising"
+        const val DISPLAY_SOURCE = "display-source"
     }
 
     private object Defaults {
@@ -49,16 +53,31 @@ class Txt2Img(
         const val WIDTH = 512
         const val HEIGHT = 512
         const val COUNT = 1
+        const val DENOISING_STRENGTH = 0.6
+        val RESIZE_MODE = ResizeMode.Crop
         const val SAMPLER_NAME = "DPM++ SDE Karras"
         const val STEPS = 20
         const val CFG = 7.0
-        const val HIRES_DENOISING = 0.7
-        const val HIRES_STEPS = 0
-        const val HIRES_UPSCALER = "Latent"
+        const val DISPLAY_SOURCE = true
+    }
+
+    private fun ResizeMode.resizeModeText() = when (this) {
+        ResizeMode.Stretch -> "Just Resize"
+        ResizeMode.Crop -> "Crop & Resize"
+        ResizeMode.Fill -> "Resize & Fill"
+        ResizeMode.Latent -> "Just Resize (Latent Upscale)"
     }
 
     override suspend fun buildCommand(builder: ChatInputCreateBuilder) {
         builder.apply {
+            attachment(
+                name = OptionNames.IMAGE,
+                description = """
+                    The image to use as reference.
+                    """.trimIndent().replace("\n", " ")
+            ) {
+                required = true
+            }
             string(
                 name = OptionNames.PROMPT,
                 description = """
@@ -66,7 +85,7 @@ class Txt2Img(
                     Example: "ocean, (boat:1.1), multiple girls".
                     """.trimIndent().replace("\n", " ")
             ) {
-                required = true
+                required = false
             }
             string(
                 name = OptionNames.NEGATIVE_PROMPT,
@@ -80,7 +99,7 @@ class Txt2Img(
             integer(
                 name = OptionNames.WIDTH,
                 description = """
-                    Width of the generated image in pixels (before hires-fix).
+                    Width of the generated image in pixels.
                     Default: ${Defaults.WIDTH}.
                     """.trimIndent().replace("\n", " ")
             ) {
@@ -91,7 +110,7 @@ class Txt2Img(
             integer(
                 name = OptionNames.HEIGHT,
                 description = """
-                    Height of the generated image in pixels (before hires-fix).
+                    Height of the generated image in pixels.
                     Default: ${Defaults.HEIGHT}.
                     """.trimIndent().replace("\n", " ")
             ) {
@@ -109,6 +128,29 @@ class Txt2Img(
                 required = false
                 minValue = 1
                 maxValue = 9
+            }
+            number(
+                name = OptionNames.DENOISING_STRENGTH,
+                description = """
+                    Denoising strength. Lower values preserve more of the original image.
+                    Default: ${Defaults.DENOISING_STRENGTH}.
+                    """.trimIndent().replace("\n", " ")
+            ) {
+                required = false
+                minValue = 0.0
+                maxValue = 1.0
+            }
+            integer(
+                name = OptionNames.RESIZE_MODE,
+                description = """
+                    Resize mode.
+                    Default: ${Defaults.RESIZE_MODE.resizeModeText()}.
+                    """.trimIndent().replace("\n", " ")
+            ) {
+                required = false
+                ResizeMode.values().forEach {
+                    choice(name = it.resizeModeText(), value = it.intValue.toLong())
+                }
             }
             integer(
                 name = OptionNames.SEED,
@@ -128,7 +170,7 @@ class Txt2Img(
             ) {
                 required = false
                 minValue = 1
-                maxValue = 40
+                maxValue = 30
             }
             number(
                 name = OptionNames.CFG,
@@ -142,38 +184,13 @@ class Txt2Img(
                 minValue = 1.0
                 maxValue = 30.0
             }
-            number(
-                name = OptionNames.HIRES_FACTOR,
+            boolean(
+                name = OptionNames.DISPLAY_SOURCE,
                 description = """
-                    If set, upscale by this factor using hires-fix.
+                    Whether to display the source image as thumbnail in the output.
+                    Default: ${Defaults.DISPLAY_SOURCE}.
                     """.trimIndent().replace("\n", " ")
-            ) {
-                required = false
-                minValue = 1.0
-                maxValue = 8.0
-            }
-            integer(
-                name = OptionNames.HIRES_STEPS,
-                description = """
-                    Number of diffusion steps for hires-fix (0 = same as steps).
-                    Default: ${Defaults.HIRES_STEPS}.
-                    """.trimIndent().replace("\n", " ")
-            ) {
-                required = false
-                minValue = 0
-                maxValue = 40
-            }
-            number(
-                name = OptionNames.HIRES_DENOISING,
-                description = """
-                    Denoising strength for hires-fix.
-                    Default: ${Defaults.HIRES_DENOISING}.
-                    """.trimIndent().replace("\n", " ")
-            ) {
-                required = false
-                minValue = 0.0
-                maxValue = 1.0
-            }
+            )
         }
     }
 
@@ -189,8 +206,16 @@ class Txt2Img(
 
         try {
             val command = interaction.command
+
+            val attachment = command.attachments[OptionNames.IMAGE]
+                ?: throw Exception("No image specified")
+            if (!attachment.isImage || attachment.contentType == null) {
+                throw Exception("Image must be an image")
+            }
+            val originalImageUrl = attachment.url
+            val image = downloadImageAsBase64(originalImageUrl, attachment.contentType!!)
+
             val prompt = command.strings[OptionNames.PROMPT]
-                ?: throw Exception("No prompt specified")
             val negativePrompt = command.strings[OptionNames.NEGATIVE_PROMPT]
             val actualNegativePrompt = if (negativePrompt != null) {
                 "${Defaults.NEGATIVE_PROMPT}, $negativePrompt"
@@ -203,6 +228,11 @@ class Txt2Img(
                 ?: Defaults.HEIGHT
             val count = command.integers[OptionNames.COUNT]?.toInt()
                 ?: Defaults.COUNT
+            val denoisingStrength = command.numbers[OptionNames.DENOISING_STRENGTH]
+                ?: Defaults.DENOISING_STRENGTH
+            val resizeMode = command.integers[OptionNames.RESIZE_MODE]
+                ?.let { ResizeMode.fromInt(it.toInt()) }
+                ?: Defaults.RESIZE_MODE
             val seed = command.integers[OptionNames.SEED]?.toInt()
                 ?: Random.nextInt(from = 0, until = Int.MAX_VALUE)
             val samplerName = Defaults.SAMPLER_NAME
@@ -210,35 +240,31 @@ class Txt2Img(
                 ?: Defaults.STEPS
             val cfg = command.numbers[OptionNames.CFG]
                 ?: Defaults.CFG
-            val hiresFactor = command.numbers[OptionNames.HIRES_FACTOR]
-            val hiresUpscaler = Defaults.HIRES_UPSCALER
-            val hiresSteps = command.integers[OptionNames.HIRES_STEPS]?.toInt()
-                ?: Defaults.HIRES_STEPS
-            val hiresDenoising = command.numbers[OptionNames.HIRES_DENOISING]
-                ?: Defaults.HIRES_DENOISING
             val checkpointName = Defaults.CHECKPOINT_NAME
 
-            val params = Txt2ImgParams(
+            val displaySource = command.booleans[OptionNames.DISPLAY_SOURCE]
+                ?: Defaults.DISPLAY_SOURCE
+
+            val params = Img2ImgParams(
+                image = image,
                 prompt = prompt,
                 negativePrompt = actualNegativePrompt,
                 width = width,
                 height = height,
                 count = count,
+                denoisingStrength = denoisingStrength,
+                resizeMode = resizeMode,
                 seed = seed,
                 samplerName = samplerName,
                 steps = steps,
                 cfg = cfg,
-                hiresFactor = hiresFactor,
-                hiresSteps = hiresSteps,
-                hiresUpscaler = hiresUpscaler,
-                hiresDenoising = hiresDenoising,
                 checkpointName = checkpointName,
             )
 
-            val response = client.txt2img(params)
+            val response = client.img2img(params)
 
             val mainParams = mutableMapOf<String, String>()
-            mainParams["Prompt"] = prompt
+            if (prompt != null) mainParams["Prompt"] = prompt
             if (negativePrompt != null) mainParams["Negative prompt"] = negativePrompt
             mainParams["Size"] = "${width}x${height}"
             mainParams["Seed"] = "$seed"
@@ -246,11 +272,8 @@ class Txt2Img(
             val otherParams = mutableMapOf<String, String>()
             otherParams["Steps"] = "$steps"
             otherParams["CFG"] = "$cfg"
-            if (hiresFactor != null) {
-                otherParams["Hires factor"] = "$hiresFactor"
-                otherParams["Hires steps"] = "$hiresSteps"
-                otherParams["Hires denoising"] = "$hiresDenoising"
-            }
+            otherParams["Denoising strength"] = "$denoisingStrength"
+            otherParams["Resize mode"] = resizeMode.resizeModeText()
 
             val images = if (response.images.size > 1) {
                 // The first image is a grid containing all the generated images
@@ -268,6 +291,11 @@ class Txt2Img(
                     footer {
                         text = otherParams.map { "${it.key}: ${it.value}" }.joinToString(", ")
                     }
+                    if (displaySource) {
+                        thumbnail {
+                            url = originalImageUrl
+                        }
+                    }
                     color = AppColors.success
                 }
                 images.forEachIndexed { index, img ->
@@ -281,5 +309,14 @@ class Txt2Img(
             initialResponse.respondWithException(e)
         }
     }
-}
 
+    @OptIn(ExperimentalEncodingApi::class)
+    private suspend fun downloadImageAsBase64(originalImageUrl: String, contentType: String): String {
+        val bytes = HttpClient(CIO)
+            .get(originalImageUrl)
+            .bodyAsChannel()
+            .readRemaining()
+            .readBytes()
+        return "data:$contentType;base64,${Base64.encode(bytes)}"
+    }
+}

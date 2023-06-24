@@ -38,7 +38,7 @@ fun createSDClient(baseUrl: String): SDClient {
 }
 
 class SDClient(val baseUrl: String, private val httpClient: HttpClient) {
-    suspend fun txt2img(params: Txt2ImgParams): Txt2ImgResponse {
+    suspend fun txt2img(params: Txt2ImgParams): ImgResponse {
         val request = Txt2ImgRequest.create(params)
         logger.trace("Request: $request")
 
@@ -46,7 +46,27 @@ class SDClient(val baseUrl: String, private val httpClient: HttpClient) {
             httpClient.post("$baseUrl/sdapi/v1/txt2img") {
                 contentType(ContentType.Application.Json)
                 setBody(request)
-            }.body<Txt2ImgResponse>()
+            }.body<ImgResponse>()
+        } catch (e: Exception) {
+            throw SDClientException(cause = e)
+        }
+        logger.trace("Response: $response")
+
+        if (response.error != null) {
+            throw SDClientException(message = response.error, details = response.detail, errors = response.errors)
+        }
+        return response
+    }
+
+    suspend fun img2img(params: Img2ImgParams): ImgResponse {
+        val request = Img2ImgRequest.create(params)
+        logger.trace("Request: $request")
+
+        val response = try {
+            httpClient.post("$baseUrl/sdapi/v1/img2img") {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }.body<ImgResponse>()
         } catch (e: Exception) {
             throw SDClientException(cause = e)
         }
@@ -76,15 +96,43 @@ data class Txt2ImgParams(
     val checkpointName: String,
 )
 
+data class Img2ImgParams(
+    val image: String,
+    val prompt: String?,
+    val negativePrompt: String,
+    val width: Int,
+    val height: Int,
+    val count: Int,
+    val denoisingStrength: Double,
+    val resizeMode: ResizeMode,
+    val seed: Int,
+    val samplerName: String,
+    val steps: Int,
+    val cfg: Double,
+    val checkpointName: String,
+)
+
+enum class ResizeMode(val intValue: Int) {
+    Stretch(0),
+    Crop(1),
+    Fill(2),
+    Latent(3),
+    ;
+
+    companion object {
+        fun fromInt(intValue: Int): ResizeMode? = values().firstOrNull { it.intValue == intValue }
+    }
+}
+
 @Serializable
 data class Txt2ImgRequest(
     @SerialName("prompt") val prompt: String? = null,
     @SerialName("negative_prompt") val negativePrompt: String? = null,
     @SerialName("width") val width: Int? = null,
     @SerialName("height") val height: Int? = null,
-    @SerialName("sampler_name") val samplerName: String? = null,
     @SerialName("n_iter") val nIter: Int? = null,
     @SerialName("seed") val seed: Int? = null,
+    @SerialName("sampler_name") val samplerName: String? = null,
     @SerialName("steps") val steps: Int? = null,
     @SerialName("cfg_scale") val cfgScale: Double? = null,
     @SerialName("enable_hr") val enableHr: Boolean? = null,
@@ -117,7 +165,7 @@ data class Txt2ImgRequest(
     @SerialName("s_noise") val sNoise: Int? = null,
     @SerialName("override_settings") val overrideSettings: JsonObject? = null,
     @SerialName("override_settings_restore_afterwards") val overrideSettingsRestoreAfterwards: Boolean? = null,
-    @SerialName("script_args") val scriptArgs: List<String>? = null,
+    @SerialName("script_args") val scriptArgs: List<JsonObject>? = null,
     @SerialName("sampler_index") val samplerIndex: String? = null,
     @SerialName("script_name") val scriptName: String? = null,
     @SerialName("send_images") val sendImages: Boolean? = null,
@@ -150,9 +198,81 @@ data class Txt2ImgRequest(
     }
 }
 
+@Serializable
+data class Img2ImgRequest(
+    @SerialName("init_images") val initImages: List<String>? = null,
+    @SerialName("prompt") val prompt: String? = null,
+    @SerialName("negative_prompt") val negativePrompt: String? = null,
+    @SerialName("width") val width: Int? = null,
+    @SerialName("height") val height: Int? = null,
+    @SerialName("n_iter") val nIter: Int? = null,
+    @SerialName("denoising_strength") val denoisingStrength: Double? = null,
+    @SerialName("resize_mode") val resizeMode: Int? = null,
+    @SerialName("seed") val seed: Int? = null,
+    @SerialName("sampler_name") val samplerName: String? = null,
+    @SerialName("steps") val steps: Int? = null,
+    @SerialName("cfg_scale") val cfgScale: Double? = null,
+    @SerialName("image_cfg_scale") val imageCfgScale: Int? = null,
+    @SerialName("mask") val mask: String? = null,
+    @SerialName("mask_blur") val maskBlur: Int? = null,
+    @SerialName("inpainting_fill") val inpaintingFill: Int? = null,
+    @SerialName("inpaint_full_res") val inpaintFullRes: Boolean? = true,
+    @SerialName("inpaint_full_res_padding") val inpaintFullResPadding: Int? = null,
+    @SerialName("inpainting_mask_invert") val inpaintingMaskInvert: Int? = null,
+    @SerialName("initial_noise_multiplier") val initialNoiseMultiplier: Int? = null,
+    @SerialName("styles") val styles: List<String>? = null,
+    @SerialName("subseed") val subseed: Int? = null,
+    @SerialName("subseed_strength") val subseedStrength: Int? = null,
+    @SerialName("seed_resize_from_h") val seedResizeFromH: Int? = null,
+    @SerialName("seed_resize_from_w") val seedResizeFromW: Int? = null,
+    @SerialName("batch_size") val batchSize: Int? = null,
+    @SerialName("restore_faces") val restoreFaces: Boolean? = null,
+    @SerialName("tiling") val tiling: Boolean? = null,
+    @SerialName("do_not_save_samples") val doNotSaveSamples: Boolean? = null,
+    @SerialName("do_not_save_grid") val doNotSaveGrid: Boolean? = null,
+    @SerialName("eta") val eta: Int? = null,
+    @SerialName("s_min_uncond") val sMinUncond: Int? = null,
+    @SerialName("s_churn") val sChurn: Int? = null,
+    @SerialName("s_tmax") val sTmax: Int? = null,
+    @SerialName("s_tmin") val sTmin: Int? = null,
+    @SerialName("s_noise") val sNoise: Int? = null,
+    @SerialName("override_settings") val overrideSettings: JsonObject? = null,
+    @SerialName("override_settings_restore_afterwards") val overrideSettingsRestoreAfterwards: Boolean? = null,
+    @SerialName("script_args") val scriptArgs: List<JsonObject>? = null,
+    @SerialName("sampler_index") val samplerIndex: String? = null,
+    @SerialName("include_init_images") val includeInitImages: Boolean? = false,
+    @SerialName("script_name") val scriptName: String? = null,
+    @SerialName("send_images") val sendImages: Boolean? = null,
+    @SerialName("save_images") val saveImages: Boolean? = null,
+    @SerialName("alwayson_scripts") val alwaysOnScripts: JsonObject? = null
+) {
+    companion object {
+        fun create(params: Img2ImgParams) = Img2ImgRequest(
+            initImages = listOf(params.image),
+            prompt = params.prompt,
+            negativePrompt = params.negativePrompt,
+            width = params.width,
+            height = params.height,
+            nIter = params.count,
+            denoisingStrength = params.denoisingStrength,
+            resizeMode = params.resizeMode.intValue,
+            seed = params.seed,
+            samplerName = params.samplerName,
+            steps = params.steps,
+            cfgScale = params.cfg,
+            overrideSettings = JsonObject(
+                mapOf(
+                    "sd_model_checkpoint" to JsonPrimitive(params.checkpointName),
+                )
+            ),
+            saveImages = true,
+        )
+    }
+}
+
 
 @Serializable
-data class Txt2ImgResponse(
+data class ImgResponse(
     @SerialName("images") val images: List<String> = listOf(),
     @SerialName("parameters") val parameters: JsonObject? = null,
     @SerialName("info") val info: String? = null,

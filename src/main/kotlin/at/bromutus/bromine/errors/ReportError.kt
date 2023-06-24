@@ -13,13 +13,21 @@ import dev.kord.rest.builder.message.create.embed
 import dev.kord.rest.builder.message.modify.embed
 import io.github.oshai.kotlinlogging.KLogger
 
+class CommandException(message: String? = null, cause: Throwable? = null) : RuntimeException(message, cause)
+
 fun KLogger.logInteractionException(e: Exception) {
-    if (e is SDClientException) {
-        info("Error: ${e.message}")
-        info("Details: ${e.details}")
-        info("Errors: ${e.errors}")
-    } else {
-        error("Unknown error.", e)
+    when (e) {
+        is CommandException -> {
+            debug("Command Exception: ${e.message}")
+        }
+        is SDClientException -> {
+            info("Error: ${e.message}")
+            info("Details: ${e.details}")
+            info("Errors: ${e.errors}")
+        }
+        else -> {
+            error("Unknown error.", e)
+        }
     }
 }
 
@@ -40,8 +48,9 @@ suspend fun MessageInteractionResponseBehavior.respondWithException(e: Exception
 
 private fun EmbedBuilder.buildEmbed(e: Exception) {
     title = "Something went wrong."
-    description = when(e.message) {
-        "OutOfMemoryError" -> "Out of memory. Please reduce the size of the requested image."
+    description = when {
+        e is CommandException -> e.message
+        e.message == "OutOfMemoryError" -> "Out of memory. Please reduce the size of the requested image."
         else -> "Unknown error."
     }
     color = AppColors.error

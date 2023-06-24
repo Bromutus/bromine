@@ -1,6 +1,7 @@
 package at.bromutus.bromine
 
 import at.bromutus.bromine.commands.ChatInputCommand
+import at.bromutus.bromine.commands.Img2Img
 import at.bromutus.bromine.commands.Txt2Img
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
@@ -21,6 +22,7 @@ suspend fun main() {
 
     val commands = listOf(
         Txt2Img(sdClient),
+        Img2Img(sdClient),
     )
 
     kord.createCommands(commands)
