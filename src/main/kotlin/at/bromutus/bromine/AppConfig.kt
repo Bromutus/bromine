@@ -28,6 +28,7 @@ fun loadAppConfig(env: EnvLoader): AppConfig {
             max = env.uintOrNull("CMD_GLOBAL_COUNT_MAX"),
             default = env.uintOrNull("CMD_GLOBAL_COUNT_DEFAULT"),
         ),
+        pixelsMax = env.uintOrNull("CMD_GLOBAL_PIXELS_MAX"),
         samplerDefault = env.string("CMD_GLOBAL_SAMPLER_DEFAULT"),
         steps = ValueOptions(
             min = env.uintOrNull("CMD_GLOBAL_STEPS_MIN"),
@@ -55,6 +56,7 @@ fun loadAppConfig(env: EnvLoader): AppConfig {
             max = env.uint("CMD_TXT2IMG_HEIGHT_MAX", default = global.height.max),
             default = env.uint("CMD_TXT2IMG_HEIGHT_DEFAULT", default = global.height.default),
         ),
+        pixelsMax = env.uint("CMD_TXT2IMG_PIXELS_MAX", default = global.pixelsMax),
         count = ValueOptions(
             min = env.uint("CMD_TXT2IMG_COUNT_MIN", default = global.count.min),
             max = env.uint("CMD_TXT2IMG_COUNT_MAX", default = global.count.max),
@@ -103,6 +105,7 @@ fun loadAppConfig(env: EnvLoader): AppConfig {
             max = env.uint("CMD_IMG2IMG_HEIGHT_MAX", default = global.height.max),
             default = env.uint("CMD_IMG2IMG_HEIGHT_DEFAULT", default = global.height.default),
         ),
+        pixelsMax = env.uint("CMD_IMG2IMG_PIXELS_MAX", default = global.pixelsMax),
         count = ValueOptions(
             min = env.uint("CMD_IMG2IMG_COUNT_MIN", default = global.count.min),
             max = env.uint("CMD_IMG2IMG_COUNT_MAX", default = global.count.max),
@@ -165,6 +168,7 @@ data class GlobalCommandConfig(
     val negativePromptAlwaysInclude: String?,
     val width: ValueOptions<UInt?>,
     val height: ValueOptions<UInt?>,
+    val pixelsMax: UInt?,
     val count: ValueOptions<UInt?>,
     val samplerDefault: String?,
     val steps: ValueOptions<UInt?>,
@@ -177,6 +181,7 @@ data class Txt2ImgCommandConfig(
     val negativePromptAlwaysInclude: String?,
     val width: ValueOptions<UInt>,
     val height: ValueOptions<UInt>,
+    val pixelsMax: UInt,
     val count: ValueOptions<UInt>,
     val samplerDefault: String,
     val steps: ValueOptions<UInt>,
@@ -193,6 +198,7 @@ data class Img2ImgCommandConfig(
     val negativePromptAlwaysInclude: String?,
     val width: ValueOptions<UInt>,
     val height: ValueOptions<UInt>,
+    val pixelsMax: UInt,
     val count: ValueOptions<UInt>,
     val denoisingStrength: ValueOptions<Double>,
     val resizeModeDefault: UInt,

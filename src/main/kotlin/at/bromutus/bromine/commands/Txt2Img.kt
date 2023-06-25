@@ -6,6 +6,8 @@ import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
 import at.bromutus.bromine.sdclient.SDClient
 import at.bromutus.bromine.sdclient.Txt2ImgParams
+import at.bromutus.bromine.utils.calculateDesiredImageSize
+import at.bromutus.bromine.utils.constrainToPixelSize
 import dev.kord.core.behavior.interaction.respondPublic
 import dev.kord.core.behavior.interaction.response.edit
 import dev.kord.core.entity.interaction.ChatInputCommandInteraction
@@ -182,9 +184,7 @@ class Txt2Img(
             val prompt = command.strings[OptionNames.PROMPT]
             val negativePrompt = command.strings[OptionNames.NEGATIVE_PROMPT]
             val width = command.integers[OptionNames.WIDTH]?.toUInt()
-                ?: config.width.default
             val height = command.integers[OptionNames.HEIGHT]?.toUInt()
-                ?: config.height.default
             val count = command.integers[OptionNames.COUNT]?.toUInt()
                 ?: config.count.default
             val seed = command.integers[OptionNames.SEED]?.toUInt()
@@ -203,19 +203,31 @@ class Txt2Img(
                 ?: config.hiresDenoising.default
             val checkpointName = config.defaultCheckpoint
 
+            val desiredSize = calculateDesiredImageSize(
+                specifiedWidth = width,
+                specifiedHeight = height,
+                defaultWidth = config.width.default,
+                defaultHeight = config.height.default,
+            )
+            val size = desiredSize.constrainToPixelSize(config.pixelsMax)
+
+            val isHiresFixDesired = hiresFactor > 1.0
+            val scaledSize = size * hiresFactor
+            val doHiresFix = isHiresFixDesired && scaledSize.inPixels <= config.pixelsMax
+
             val params = Txt2ImgParams(
                 prompt = listOfNotNull(config.promptAlwaysInclude, prompt)
                     .joinToString(", "),
                 negativePrompt = listOfNotNull(config.negativePromptAlwaysInclude, negativePrompt)
                     .joinToString(", "),
-                width = width,
-                height = height,
+                width = size.width,
+                height = size.height,
                 count = count,
                 seed = seed,
                 samplerName = samplerName,
                 steps = steps,
                 cfg = cfg,
-                hiresFactor = hiresFactor,
+                hiresFactor = if (doHiresFix) hiresFactor else null,
                 hiresSteps = hiresSteps,
                 hiresUpscaler = hiresUpscaler,
                 hiresDenoising = hiresDenoising,
@@ -227,16 +239,24 @@ class Txt2Img(
             val mainParams = mutableMapOf<String, String>()
             if (prompt != null) mainParams["Prompt"] = prompt
             if (negativePrompt != null) mainParams["Negative prompt"] = negativePrompt
-            mainParams["Size"] = "${width}x${height}"
+            mainParams["Size"] = if (doHiresFix) "$scaledSize (scaled up from $size)" else "$scaledSize"
             mainParams["Seed"] = "$seed"
 
             val otherParams = mutableMapOf<String, String>()
             otherParams["Steps"] = "$steps"
             otherParams["CFG"] = "$cfg"
-            if (hiresFactor > 1.0) {
+            if (doHiresFix) {
                 otherParams["Hires factor"] = "$hiresFactor"
                 otherParams["Hires steps"] = "$hiresSteps"
                 otherParams["Hires denoising"] = "$hiresDenoising"
+            }
+
+            val warnings = mutableListOf<String>()
+            if (isHiresFixDesired && !doHiresFix) {
+                warnings.add("Hires-fix was ignored due to size constraints.")
+            }
+            if (desiredSize.inPixels > size.inPixels) {
+                warnings.add("$desiredSize was reduced to $size due to size constraints.")
             }
 
             val images = if (response.images.size > 1) {
@@ -252,6 +272,9 @@ class Txt2Img(
                 embed {
                     title = "Generation completed."
                     description = mainParams.map { "**${it.key}**: ${it.value}" }.joinToString("\n")
+                    if (warnings.isNotEmpty()) {
+                        description += "\n\n_Warnings:_\n" + warnings.joinToString("\n") { "- $it" }
+                    }
                     footer {
                         text = otherParams.map { "${it.key}: ${it.value}" }.joinToString(", ")
                     }

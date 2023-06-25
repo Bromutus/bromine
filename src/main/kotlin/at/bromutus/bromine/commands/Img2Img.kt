@@ -7,6 +7,8 @@ import at.bromutus.bromine.errors.respondWithException
 import at.bromutus.bromine.sdclient.Img2ImgParams
 import at.bromutus.bromine.sdclient.ResizeMode
 import at.bromutus.bromine.sdclient.SDClient
+import at.bromutus.bromine.utils.calculateDesiredImageSize
+import at.bromutus.bromine.utils.constrainToPixelSize
 import dev.kord.core.behavior.interaction.respondPublic
 import dev.kord.core.behavior.interaction.response.edit
 import dev.kord.core.entity.interaction.ChatInputCommandInteraction
@@ -206,19 +208,7 @@ class Img2Img(
             val prompt = command.strings[OptionNames.PROMPT]
             val negativePrompt = command.strings[OptionNames.NEGATIVE_PROMPT]
             val width = command.integers[OptionNames.WIDTH]?.toUInt()
-                ?.let {
-                    if (it == 0u) attachment.width?.toUInt()
-                        ?.coerceIn(config.width.min, config.width.max)
-                    else it
-                }
-                ?: config.width.default
             val height = command.integers[OptionNames.HEIGHT]?.toUInt()
-                ?.let {
-                    if (it == 0u) attachment.height?.toUInt()
-                        ?.coerceIn(config.height.min, config.height.max)
-                    else it
-                }
-                ?: config.height.default
             val count = command.integers[OptionNames.COUNT]?.toUInt()
                 ?: config.count.default
             val denoisingStrength = command.numbers[OptionNames.DENOISING_STRENGTH]
@@ -238,14 +228,24 @@ class Img2Img(
             val displaySource = command.booleans[OptionNames.DISPLAY_SOURCE]
                 ?: config.displaySourceImageDefault
 
+            val desiredSize = calculateDesiredImageSize(
+                specifiedWidth = width,
+                specifiedHeight = height,
+                originalWidth = attachment.width?.toUInt(),
+                originalHeight = attachment.height?.toUInt(),
+                defaultWidth = config.width.default,
+                defaultHeight = config.height.default,
+            )
+            val size = desiredSize.constrainToPixelSize(config.pixelsMax)
+
             val params = Img2ImgParams(
                 image = image,
                 prompt = listOfNotNull(config.promptAlwaysInclude, prompt)
                     .joinToString(", "),
                 negativePrompt = listOfNotNull(config.negativePromptAlwaysInclude, negativePrompt)
                     .joinToString(", "),
-                width = width,
-                height = height,
+                width = size.width,
+                height = size.height,
                 count = count,
                 denoisingStrength = denoisingStrength,
                 resizeMode = resizeMode,
@@ -261,7 +261,7 @@ class Img2Img(
             val mainParams = mutableMapOf<String, String>()
             if (prompt != null) mainParams["Prompt"] = prompt
             if (negativePrompt != null) mainParams["Negative prompt"] = negativePrompt
-            mainParams["Size"] = "${width}x${height}"
+            mainParams["Size"] = "$size"
             mainParams["Seed"] = "$seed"
 
             val otherParams = mutableMapOf<String, String>()
@@ -269,6 +269,11 @@ class Img2Img(
             otherParams["CFG"] = "$cfg"
             otherParams["Denoising strength"] = "$denoisingStrength"
             otherParams["Resize mode"] = resizeMode.resizeModeText()
+
+            val warnings = mutableListOf<String>()
+            if (desiredSize.inPixels > size.inPixels) {
+                warnings.add("$desiredSize was reduced to $size due to size constraints.")
+            }
 
             val images = if (response.images.size > 1) {
                 // The first image is a grid containing all the generated images
@@ -283,6 +288,9 @@ class Img2Img(
                 embed {
                     title = "Generation completed."
                     description = mainParams.map { "**${it.key}**: ${it.value}" }.joinToString("\n")
+                    if (warnings.isNotEmpty()) {
+                        description += "\n\n_Warnings:_\n" + warnings.joinToString("\n") { "- $it" }
+                    }
                     footer {
                         text = otherParams.map { "${it.key}: ${it.value}" }.joinToString(", ")
                     }
@@ -315,3 +323,4 @@ class Img2Img(
         return "data:$contentType;base64,${Base64.encode(bytes)}"
     }
 }
+
