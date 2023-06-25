@@ -3,6 +3,7 @@ package at.bromutus.bromine
 import at.bromutus.bromine.commands.ChatInputCommand
 import at.bromutus.bromine.commands.Img2Img
 import at.bromutus.bromine.commands.Txt2Img
+import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
 import at.bromutus.bromine.sdclient.createSDClient
@@ -63,7 +64,7 @@ private fun Kord.registerInteractionHandlers(commands: List<ChatInputCommand>) {
         logger.debug("New interaction: $commandName")
         try {
             commands.find { it.name == commandName }?.handleInteraction(interaction)
-                ?: throw Exception("Unable to handle command: $commandName. Maybe this command was deleted?")
+                ?: throw CommandException("Unable to handle command: $commandName. Maybe this command was deleted?")
         } catch (e: Exception) {
             logger.logInteractionException(e)
             interaction.respondWithException(e)

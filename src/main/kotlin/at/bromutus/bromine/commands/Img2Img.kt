@@ -2,6 +2,7 @@ package at.bromutus.bromine.commands
 
 import at.bromutus.bromine.AppColors
 import at.bromutus.bromine.Img2ImgCommandConfig
+import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
 import at.bromutus.bromine.sdclient.Img2ImgParams
@@ -200,7 +201,7 @@ class Img2Img(
 
             val attachment = command.attachments[OptionNames.IMAGE]!!
             if (!attachment.isImage || attachment.contentType == null) {
-                throw Exception("Image must be an image")
+                throw CommandException("Image must be an image")
             }
             val originalImageUrl = attachment.url
             val image = downloadImageAsBase64(originalImageUrl, attachment.contentType!!)
