@@ -80,8 +80,8 @@ class SDClient(val baseUrl: String, private val httpClient: HttpClient) {
 }
 
 data class Txt2ImgParams(
-    val prompt: String,
-    val negativePrompt: String,
+    val prompt: String?,
+    val negativePrompt: String?,
     val width: UInt,
     val height: UInt,
     val count: UInt,
@@ -99,7 +99,7 @@ data class Txt2ImgParams(
 data class Img2ImgParams(
     val image: String,
     val prompt: String?,
-    val negativePrompt: String,
+    val negativePrompt: String?,
     val width: UInt,
     val height: UInt,
     val count: UInt,

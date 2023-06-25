@@ -8,6 +8,7 @@ import at.bromutus.bromine.sdclient.SDClient
 import at.bromutus.bromine.sdclient.Txt2ImgParams
 import at.bromutus.bromine.utils.calculateDesiredImageSize
 import at.bromutus.bromine.utils.constrainToPixelSize
+import at.bromutus.bromine.utils.includeText
 import dev.kord.core.behavior.interaction.respondPublic
 import dev.kord.core.behavior.interaction.response.edit
 import dev.kord.core.entity.interaction.ChatInputCommandInteraction
@@ -216,10 +217,8 @@ class Txt2Img(
             val doHiresFix = isHiresFixDesired && scaledSize.inPixels <= config.pixelsMax
 
             val params = Txt2ImgParams(
-                prompt = listOfNotNull(config.promptAlwaysInclude, prompt)
-                    .joinToString(", "),
-                negativePrompt = listOfNotNull(config.negativePromptAlwaysInclude, negativePrompt)
-                    .joinToString(", "),
+                prompt = includeText(config.promptAlwaysInclude, prompt),
+                negativePrompt = includeText(config.negativePromptAlwaysInclude, negativePrompt),
                 width = size.width,
                 height = size.height,
                 count = count,
