@@ -15,15 +15,15 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 private val logger = KotlinLogging.logger {}
 
 suspend fun main() {
-    val config = loadAppConfig(EnvLoader())
+    val config = loadAppConfig()
 
     val sdClient = createSDClient(config.sd.apiUrl)
 
     val kord = Kord(config.discord.token)
 
     val commands = listOf(
-        Txt2Img(sdClient, config.commands.txt2img),
-        Img2Img(sdClient, config.commands.img2img),
+        Txt2Img(sdClient, config.commands),
+        Img2Img(sdClient, config.commands),
     )
 
     kord.createCommands(commands)

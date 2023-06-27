@@ -1,7 +1,7 @@
 package at.bromutus.bromine.commands
 
 import at.bromutus.bromine.AppColors
-import at.bromutus.bromine.Img2ImgCommandConfig
+import at.bromutus.bromine.CommandsConfig
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
@@ -34,7 +34,7 @@ private val logger = KotlinLogging.logger {}
 
 class Img2Img(
     private val client: SDClient,
-    private val config: Img2ImgCommandConfig,
+    private val config: CommandsConfig,
 ) : ChatInputCommand {
     override val name = "img2img"
     override val description = "Generate an image from another image"
@@ -93,51 +93,51 @@ class Img2Img(
                 name = OptionNames.WIDTH,
                 description = """
                     Width of the generated image in pixels (0 = same as original).
-                    Default: ${config.width.default}.
+                    Default: ${config.defaultWidth}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.width.min.toLong()
-                maxValue = config.width.max.toLong()
+                minValue = config.minWidth.toLong()
+                maxValue = config.maxWidth.toLong()
             }
             integer(
                 name = OptionNames.HEIGHT,
                 description = """
                     Height of the generated image in pixels (0 = same as original).
-                    Default: ${config.height.default}.
+                    Default: ${config.defaultHeight}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.height.min.toLong()
-                maxValue = config.height.max.toLong()
+                minValue = config.minHeight.toLong()
+                maxValue = config.maxHeight.toLong()
             }
             integer(
                 name = OptionNames.COUNT,
                 description = """
                     Number of images to generate.
-                    Default: ${config.count.default}.
+                    Default: ${config.defaultCount}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.count.min.toLong()
-                maxValue = config.count.max.toLong()
+                minValue = config.minCount.toLong()
+                maxValue = config.maxCount.toLong()
             }
             number(
                 name = OptionNames.DENOISING_STRENGTH,
                 description = """
                     Denoising strength. Lower values preserve more of the original image.
-                    Default: ${config.denoisingStrength.default}.
+                    Default: ${config.defaultDenoisingStrength}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.denoisingStrength.min
-                maxValue = config.denoisingStrength.max
+                minValue = config.minDenoisingStrength
+                maxValue = config.maxDenoisingStrength
             }
             integer(
                 name = OptionNames.RESIZE_MODE,
                 description = """
                     Resize mode.
-                    Default: ${ResizeMode.fromUInt(config.resizeModeDefault)!!.resizeModeText()}.
+                    Default: ${ResizeMode.fromUInt(config.defaultResizeMode)!!.resizeModeText()}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
@@ -158,30 +158,30 @@ class Img2Img(
                 name = OptionNames.STEPS,
                 description = """
                     Number of diffusion steps.
-                    Default: ${config.steps.default}.
+                    Default: ${config.defaultSteps}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.steps.min.toLong()
-                maxValue = config.steps.max.toLong()
+                minValue = config.minSteps.toLong()
+                maxValue = config.maxSteps.toLong()
             }
             number(
                 name = OptionNames.CFG,
                 description = """
                     Classifier-free guidance.
                     High values increase guidance, but may lead to artifacts.
-                    Default: ${config.cfg.default}.
+                    Default: ${config.defaultCfg}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.cfg.min
-                maxValue = config.cfg.max
+                minValue = config.minCfg
+                maxValue = config.maxCfg
             }
             boolean(
                 name = OptionNames.DISPLAY_SOURCE,
                 description = """
                     Whether to display the source image as thumbnail in the output.
-                    Default: ${config.displaySourceImageDefault}.
+                    Default: ${config.displaySourceImageByDefault}.
                     """.trimIndent().replace("\n", " ")
             )
         }
@@ -212,38 +212,38 @@ class Img2Img(
             val width = command.integers[OptionNames.WIDTH]?.toUInt()
             val height = command.integers[OptionNames.HEIGHT]?.toUInt()
             val count = command.integers[OptionNames.COUNT]?.toUInt()
-                ?: config.count.default
+                ?: config.defaultCount
             val denoisingStrength = command.numbers[OptionNames.DENOISING_STRENGTH]
-                ?: config.denoisingStrength.default
+                ?: config.defaultDenoisingStrength
             val resizeMode = command.integers[OptionNames.RESIZE_MODE]
                 ?.let { ResizeMode.fromUInt(it.toUInt()) }
-                ?: ResizeMode.fromUInt(config.resizeModeDefault)!!
+                ?: ResizeMode.fromUInt(config.defaultResizeMode)!!
             val seed = command.integers[OptionNames.SEED]?.toUInt()
                 ?: Random.nextUInt()
-            val samplerName = config.samplerDefault
+            val samplerName = config.defaultSampler
             val steps = command.integers[OptionNames.STEPS]?.toUInt()
-                ?: config.steps.default
+                ?: config.defaultSteps
             val cfg = command.numbers[OptionNames.CFG]
-                ?: config.cfg.default
-            val checkpointName = config.checkpointDefault
+                ?: config.defaultCfg
+            val checkpointName = config.defaultCheckpoint
 
             val displaySource = command.booleans[OptionNames.DISPLAY_SOURCE]
-                ?: config.displaySourceImageDefault
+                ?: config.displaySourceImageByDefault
 
             val desiredSize = calculateDesiredImageSize(
                 specifiedWidth = width,
                 specifiedHeight = height,
                 originalWidth = attachment.width?.toUInt(),
                 originalHeight = attachment.height?.toUInt(),
-                defaultWidth = config.width.default,
-                defaultHeight = config.height.default,
+                defaultWidth = config.defaultWidth,
+                defaultHeight = config.defaultHeight,
             )
-            val size = desiredSize.constrainToPixelSize(config.pixelsMax)
+            val size = desiredSize.constrainToPixelSize(config.maxPixels)
 
             val params = Img2ImgParams(
                 image = image,
-                prompt = includeText(config.promptAlwaysInclude, prompt),
-                negativePrompt = includeText(config.negativePromptAlwaysInclude, negativePrompt),
+                prompt = includeText(config.alwaysIncludedPrompt, prompt),
+                negativePrompt = includeText(config.alwaysIncludedNegativePrompt, negativePrompt),
                 width = size.width,
                 height = size.height,
                 count = count,
@@ -323,4 +323,31 @@ class Img2Img(
         return "data:$contentType;base64,${Base64.encode(bytes)}"
     }
 }
+
+private val CommandsConfig.defaultCheckpoint get() = img2img.defaultCheckpoint ?: global.defaultCheckpoint
+private val CommandsConfig.alwaysIncludedPrompt get() = img2img.alwaysIncludedPrompt ?: global.alwaysIncludedPrompt
+private val CommandsConfig.alwaysIncludedNegativePrompt get() = img2img.alwaysIncludedNegativePrompt
+    ?: global.alwaysIncludedNegativePrompt
+private val CommandsConfig.minWidth get() = img2img.width?.min ?: global.width.min
+private val CommandsConfig.maxWidth get() = img2img.width?.max ?: global.width.max
+private val CommandsConfig.defaultWidth get() = img2img.width?.default ?: global.width.default
+private val CommandsConfig.minHeight get() = img2img.height?.min ?: global.height.min
+private val CommandsConfig.maxHeight get() = img2img.height?.max ?: global.height.max
+private val CommandsConfig.defaultHeight get() = img2img.height?.default ?: global.height.default
+private val CommandsConfig.maxPixels get() = img2img.maxPixels ?: global.maxPixels
+private val CommandsConfig.minCount get() = img2img.count?.min ?: global.count.min
+private val CommandsConfig.maxCount get() = img2img.count?.max ?: global.count.max
+private val CommandsConfig.defaultCount get() = img2img.count?.default ?: global.count.default
+private val CommandsConfig.minDenoisingStrength get() = img2img.denoisingStrength.min
+private val CommandsConfig.maxDenoisingStrength get() = img2img.denoisingStrength.max
+private val CommandsConfig.defaultDenoisingStrength get() = img2img.denoisingStrength.default
+private val CommandsConfig.defaultResizeMode get() = img2img.defaultResizeMode
+private val CommandsConfig.defaultSampler get() = img2img.defaultSampler ?: global.defaultSampler
+private val CommandsConfig.minSteps get() = img2img.steps?.min ?: global.steps.min
+private val CommandsConfig.maxSteps get() = img2img.steps?.max ?: global.steps.max
+private val CommandsConfig.defaultSteps get() = img2img.steps?.default ?: global.steps.default
+private val CommandsConfig.minCfg get() = img2img.cfg?.min ?: global.cfg.min
+private val CommandsConfig.maxCfg get() = img2img.cfg?.max ?: global.cfg.max
+private val CommandsConfig.defaultCfg get() = img2img.cfg?.default ?: global.cfg.default
+private val CommandsConfig.displaySourceImageByDefault get() = img2img.displaySourceImageByDefault
 

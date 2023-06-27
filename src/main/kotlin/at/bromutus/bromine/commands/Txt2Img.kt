@@ -1,7 +1,7 @@
 package at.bromutus.bromine.commands
 
 import at.bromutus.bromine.AppColors
-import at.bromutus.bromine.Txt2ImgCommandConfig
+import at.bromutus.bromine.CommandsConfig
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
 import at.bromutus.bromine.sdclient.SDClient
@@ -30,7 +30,7 @@ private val logger = KotlinLogging.logger {}
 
 class Txt2Img(
     private val client: SDClient,
-    private val config: Txt2ImgCommandConfig,
+    private val config: CommandsConfig,
 ) : ChatInputCommand {
     override val name = "txt2img"
     override val description = "Generate an image from text"
@@ -73,34 +73,34 @@ class Txt2Img(
                 name = OptionNames.WIDTH,
                 description = """
                     Width of the generated image in pixels (before hires-fix).
-                    Default: ${config.width.default}.
+                    Default: ${config.defaultWidth}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.width.min.toLong()
-                maxValue = config.width.max.toLong()
+                minValue = config.minWidth.toLong()
+                maxValue = config.maxWidth.toLong()
             }
             integer(
                 name = OptionNames.HEIGHT,
                 description = """
                     Height of the generated image in pixels (before hires-fix).
-                    Default: ${config.height.default}.
+                    Default: ${config.defaultHeight}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.height.min.toLong()
-                maxValue = config.height.max.toLong()
+                minValue = config.minHeight.toLong()
+                maxValue = config.maxHeight.toLong()
             }
             integer(
                 name = OptionNames.COUNT,
                 description = """
                     Number of images to generate.
-                    Default: ${config.count.default}.
+                    Default: ${config.defaultCount}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.count.min.toLong()
-                maxValue = config.count.max.toLong()
+                minValue = config.minCount.toLong()
+                maxValue = config.maxCount.toLong()
             }
             integer(
                 name = OptionNames.SEED,
@@ -115,24 +115,24 @@ class Txt2Img(
                 name = OptionNames.STEPS,
                 description = """
                     Number of diffusion steps.
-                    Default: ${config.steps.default}.
+                    Default: ${config.defaultSteps}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.steps.min.toLong()
-                maxValue = config.steps.max.toLong()
+                minValue = config.minSteps.toLong()
+                maxValue = config.maxSteps.toLong()
             }
             number(
                 name = OptionNames.CFG,
                 description = """
                     Classifier-free guidance.
                     High values increase guidance, but may lead to artifacts.
-                    Default: ${config.cfg.default}.
+                    Default: ${config.defaultCfg}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.cfg.min
-                maxValue = config.cfg.max
+                minValue = config.minCfg
+                maxValue = config.maxCfg
             }
             number(
                 name = OptionNames.HIRES_FACTOR,
@@ -141,30 +141,30 @@ class Txt2Img(
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.hiresFactor.min
-                maxValue = config.hiresFactor.max
+                minValue = config.minHiresFactor
+                maxValue = config.maxHiresFactor
             }
             integer(
                 name = OptionNames.HIRES_STEPS,
                 description = """
                     Number of diffusion steps for hires-fix (0 = same as steps).
-                    Default: ${config.hiresSteps.default}.
+                    Default: ${config.defaultHiresSteps}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.hiresSteps.min.toLong()
-                maxValue = config.hiresSteps.max.toLong()
+                minValue = config.minHiresSteps.toLong()
+                maxValue = config.maxHiresSteps.toLong()
             }
             number(
                 name = OptionNames.HIRES_DENOISING,
                 description = """
                     Denoising strength for hires-fix.
-                    Default: ${config.hiresDenoising.default}.
+                    Default: ${config.defaultHiresDenoising}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.hiresDenoising.min
-                maxValue = config.hiresDenoising.max
+                minValue = config.minHiresDenoising
+                maxValue = config.maxHiresDenoising
             }
         }
     }
@@ -187,38 +187,38 @@ class Txt2Img(
             val width = command.integers[OptionNames.WIDTH]?.toUInt()
             val height = command.integers[OptionNames.HEIGHT]?.toUInt()
             val count = command.integers[OptionNames.COUNT]?.toUInt()
-                ?: config.count.default
+                ?: config.defaultCount
             val seed = command.integers[OptionNames.SEED]?.toUInt()
                 ?: Random.nextUInt()
-            val samplerName = config.samplerDefault
+            val samplerName = config.defaultSampler
             val steps = command.integers[OptionNames.STEPS]?.toUInt()
-                ?: config.steps.default
+                ?: config.defaultSteps
             val cfg = command.numbers[OptionNames.CFG]
-                ?: config.cfg.default
+                ?: config.defaultCfg
             val hiresFactor = command.numbers[OptionNames.HIRES_FACTOR]
-                ?: config.hiresFactor.default
-            val hiresUpscaler = config.hiresUpscalerDefault
+                ?: config.defaultHiresFactor
+            val hiresUpscaler = config.hiresUpscaler
             val hiresSteps = command.integers[OptionNames.HIRES_STEPS]?.toUInt()
-                ?: config.hiresSteps.default
+                ?: config.defaultHiresSteps
             val hiresDenoising = command.numbers[OptionNames.HIRES_DENOISING]
-                ?: config.hiresDenoising.default
+                ?: config.defaultHiresDenoising
             val checkpointName = config.defaultCheckpoint
 
             val desiredSize = calculateDesiredImageSize(
                 specifiedWidth = width,
                 specifiedHeight = height,
-                defaultWidth = config.width.default,
-                defaultHeight = config.height.default,
+                defaultWidth = config.defaultWidth,
+                defaultHeight = config.defaultHeight,
             )
-            val size = desiredSize.constrainToPixelSize(config.pixelsMax)
+            val size = desiredSize.constrainToPixelSize(config.maxPixels)
 
             val isHiresFixDesired = hiresFactor > 1.0
             val scaledSize = size * hiresFactor
-            val doHiresFix = isHiresFixDesired && scaledSize.inPixels <= config.pixelsMax
+            val doHiresFix = isHiresFixDesired && scaledSize.inPixels <= config.maxPixels
 
             val params = Txt2ImgParams(
-                prompt = includeText(config.promptAlwaysInclude, prompt),
-                negativePrompt = includeText(config.negativePromptAlwaysInclude, negativePrompt),
+                prompt = includeText(config.alwaysIncludedPrompt, prompt),
+                negativePrompt = includeText(config.alwaysIncludedNegativePrompt, negativePrompt),
                 width = size.width,
                 height = size.height,
                 count = count,
@@ -291,4 +291,36 @@ class Txt2Img(
         }
     }
 }
+
+private val CommandsConfig.defaultCheckpoint get() = txt2img.defaultCheckpoint ?: global.defaultCheckpoint
+private val CommandsConfig.alwaysIncludedPrompt get() = txt2img.alwaysIncludedPrompt ?: global.alwaysIncludedPrompt
+private val CommandsConfig.alwaysIncludedNegativePrompt get() = txt2img.alwaysIncludedNegativePrompt
+    ?: global.alwaysIncludedNegativePrompt
+private val CommandsConfig.minWidth get() = txt2img.width?.min ?: global.width.min
+private val CommandsConfig.maxWidth get() = txt2img.width?.max ?: global.width.max
+private val CommandsConfig.defaultWidth get() = txt2img.width?.default ?: global.width.default
+private val CommandsConfig.minHeight get() = txt2img.height?.min ?: global.height.min
+private val CommandsConfig.maxHeight get() = txt2img.height?.max ?: global.height.max
+private val CommandsConfig.defaultHeight get() = txt2img.height?.default ?: global.height.default
+private val CommandsConfig.maxPixels get() = txt2img.maxPixels ?: global.maxPixels
+private val CommandsConfig.minCount get() = txt2img.count?.min ?: global.count.min
+private val CommandsConfig.maxCount get() = txt2img.count?.max ?: global.count.max
+private val CommandsConfig.defaultCount get() = txt2img.count?.default ?: global.count.default
+private val CommandsConfig.defaultSampler get() = txt2img.defaultSampler ?: global.defaultSampler
+private val CommandsConfig.minSteps get() = txt2img.steps?.min ?: global.steps.min
+private val CommandsConfig.maxSteps get() = txt2img.steps?.max ?: global.steps.max
+private val CommandsConfig.defaultSteps get() = txt2img.steps?.default ?: global.steps.default
+private val CommandsConfig.minCfg get() = txt2img.cfg?.min ?: global.cfg.min
+private val CommandsConfig.maxCfg get() = txt2img.cfg?.max ?: global.cfg.max
+private val CommandsConfig.defaultCfg get() = txt2img.cfg?.default ?: global.cfg.default
+private val CommandsConfig.minHiresFactor get() = txt2img.hiresFactor.min
+private val CommandsConfig.maxHiresFactor get() = txt2img.hiresFactor.max
+private val CommandsConfig.defaultHiresFactor get() = txt2img.hiresFactor.default
+private val CommandsConfig.minHiresSteps get() = txt2img.hiresSteps.min
+private val CommandsConfig.maxHiresSteps get() = txt2img.hiresSteps.max
+private val CommandsConfig.defaultHiresSteps get() = txt2img.hiresSteps.default
+private val CommandsConfig.hiresUpscaler get() = txt2img.hiresUpscaler
+private val CommandsConfig.minHiresDenoising get() = txt2img.hiresDenoising.min
+private val CommandsConfig.maxHiresDenoising get() = txt2img.hiresDenoising.max
+private val CommandsConfig.defaultHiresDenoising get() = txt2img.hiresDenoising.default
 

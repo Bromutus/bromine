@@ -1,0 +1,63 @@
+discord:
+  token: "mytoken"
+
+sd:
+  apiUrl: "http://localhost:7860"
+
+commands:
+
+  global:
+    defaultCheckpoint:
+    alwaysIncludedPrompt: "masterpiece, best quality"
+    alwaysIncludedNegativePrompt: "bad quality, worst quality"
+    width:
+      min: 1
+      max: 8192
+      default: 512
+    height:
+      min: 1
+      max: 8192
+      default: 512
+    maxPixels: 1638400
+    count:
+      min: 1
+      max: 9
+      default: 1
+    defaultSampler: "DPM++ SDE Karras"
+    steps:
+      min: 1
+      max: 40
+      default: 20
+    cfg:
+      min: 1.0
+      max: 30.0
+      default: 7.0
+
+  txt2img:
+    hiresFactor:
+      min: 1.0
+      max: 20.0
+      default: 1.0
+    hiresSteps:
+      min: 0
+      max: 40
+      default: 0
+    hiresUpscaler: "Latent"
+    hiresDenoising:
+      min: 0.0
+      max: 1.0
+      default: 0.7
+
+  img2img:
+    width:
+      min: 0
+      default: 0
+    height:
+      min: 0
+      default: 0
+    denoisingStrength:
+      min: 0.0
+      max: 1.0
+      default: 0.65
+    defaultResizeMode: 1
+    displaySourceImageByDefault: true
