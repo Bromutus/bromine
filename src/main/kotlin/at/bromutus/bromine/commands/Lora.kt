@@ -22,7 +22,7 @@ private val logger = KotlinLogging.logger {}
 class LoraCommand(
     private val config: LoraConfig,
     private val nsfw: Boolean,
-) : AutocompleteCommand {
+) : AutoCompleteCommand {
     override val name = "lora${if (nsfw) "-nsfw" else ""}"
     override val description = "LoRA-related commands${if (nsfw) " (NSFW)" else ""}"
 
@@ -160,12 +160,12 @@ class LoraCommand(
         }
     }
 
-    override suspend fun handleAutocomplete(interaction: AutoCompleteInteraction) {
+    override suspend fun handleAutoComplete(interaction: AutoCompleteInteraction) {
         val command = interaction.command as? SubCommand
         if (command?.name != infoCommand) return
         val searchText = interaction.focusedOption.value
         val autoCompleteOptions = searchKeys
-            .mapValues { it.value.split(searchText.lowercase()).size - 1 }
+            .mapValues { it.value.split(searchText, ignoreCase = true).size - 1 }
             .filterValues { it > 0 }
             .entries
             .sortedByDescending { it.value }
@@ -191,7 +191,7 @@ class LoraCommand(
 
     private val searchKeys: Map<Lora, String> by lazy {
         loras.associateWith {
-            (listOf(it.id.lowercase(), it.name.lowercase()) + it.tags.map(String::lowercase)).joinToString(" | ")
+            (listOf(it.id, it.name) + it.tags + it.keywords).joinToString(" | ")
         }
     }
 }

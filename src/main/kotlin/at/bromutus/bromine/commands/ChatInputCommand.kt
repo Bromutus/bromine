@@ -16,6 +16,6 @@ interface ChatInputCommand {
     suspend fun handleInteraction(interaction: ChatInputCommandInteraction)
 }
 
-interface AutocompleteCommand : ChatInputCommand {
-    suspend fun handleAutocomplete(interaction: AutoCompleteInteraction)
+interface AutoCompleteCommand : ChatInputCommand {
+    suspend fun handleAutoComplete(interaction: AutoCompleteInteraction)
 }

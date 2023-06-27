@@ -30,7 +30,7 @@ suspend fun main() {
 
     kord.createCommands(commands)
     kord.registerInteractionHandlers(commands)
-    kord.registerAutocompleteHandlers(commands.filterIsInstance<AutocompleteCommand>())
+    kord.registerAutoCompleteHandlers(commands.filterIsInstance<AutoCompleteCommand>())
 
     kord.login {
         logger.info("Login successful")
@@ -78,10 +78,10 @@ private fun Kord.registerInteractionHandlers(commands: List<ChatInputCommand>) {
     }
 }
 
-private fun Kord.registerAutocompleteHandlers(commands: List<AutocompleteCommand>) {
+private fun Kord.registerAutoCompleteHandlers(commands: List<AutoCompleteCommand>) {
     on<AutoCompleteInteractionCreateEvent> {
         val command = interaction.command
-        commands.find { it.name == command.rootName }?.handleAutocomplete(interaction)
+        commands.find { it.name == command.rootName }?.handleAutoComplete(interaction)
     }
 }
 
