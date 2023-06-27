@@ -4,9 +4,7 @@ import at.bromutus.bromine.AppColors
 import at.bromutus.bromine.sdclient.SDClientException
 import dev.kord.core.behavior.interaction.ActionInteractionBehavior
 import dev.kord.core.behavior.interaction.respondPublic
-import dev.kord.core.behavior.interaction.response.MessageInteractionResponseBehavior
-import dev.kord.core.behavior.interaction.response.PublicMessageInteractionResponseBehavior
-import dev.kord.core.behavior.interaction.response.edit
+import dev.kord.core.behavior.interaction.response.*
 import dev.kord.core.entity.interaction.response.MessageInteractionResponse
 import dev.kord.rest.builder.message.EmbedBuilder
 import dev.kord.rest.builder.message.create.embed
@@ -41,6 +39,13 @@ suspend fun ActionInteractionBehavior.respondWithException(e: Exception): Public
 suspend fun MessageInteractionResponseBehavior.respondWithException(e: Exception): MessageInteractionResponse =
     edit {
         embeds?.clear()
+        embed {
+            buildEmbed(e)
+        }
+    }
+
+suspend fun DeferredMessageInteractionResponseBehavior.respondWithException(e: Exception): MessageInteractionResponse =
+    respond {
         embed {
             buildEmbed(e)
         }

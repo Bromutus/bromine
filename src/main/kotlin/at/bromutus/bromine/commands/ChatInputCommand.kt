@@ -1,6 +1,7 @@
 package at.bromutus.bromine.commands
 
 import dev.kord.common.entity.Snowflake
+import dev.kord.core.entity.interaction.AutoCompleteInteraction
 import dev.kord.core.entity.interaction.ChatInputCommandInteraction
 import dev.kord.rest.builder.interaction.ChatInputCreateBuilder
 
@@ -13,4 +14,8 @@ interface ChatInputCommand {
     suspend fun buildCommand(builder: ChatInputCreateBuilder)
 
     suspend fun handleInteraction(interaction: ChatInputCommandInteraction)
+}
+
+interface AutocompleteCommand : ChatInputCommand {
+    suspend fun handleAutocomplete(interaction: AutoCompleteInteraction)
 }

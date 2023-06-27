@@ -32,7 +32,7 @@ import kotlin.random.nextUInt
 
 private val logger = KotlinLogging.logger {}
 
-class Img2Img(
+class Img2ImgCommand(
     private val client: SDClient,
     private val config: CommandsConfig,
 ) : ChatInputCommand {

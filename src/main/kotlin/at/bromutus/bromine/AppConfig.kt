@@ -22,7 +22,8 @@ fun loadAppConfig(): AppConfig {
 data class AppConfig(
     val discord: DiscordConfig,
     val sd: SDConfig,
-    val commands: CommandsConfig,
+    val commands: CommandsConfig = CommandsConfig(),
+    val lora: LoraConfig = LoraConfig(),
 )
 
 @Serializable
@@ -37,9 +38,9 @@ data class SDConfig(
 
 @Serializable
 data class CommandsConfig(
-    val global: GlobalCommandConfig,
-    val txt2img: Txt2ImgCommandConfig,
-    val img2img: Img2ImgCommandConfig,
+    val global: GlobalCommandConfig = GlobalCommandConfig(),
+    val txt2img: Txt2ImgCommandConfig = Txt2ImgCommandConfig(),
+    val img2img: Img2ImgCommandConfig = Img2ImgCommandConfig(),
 )
 
 @Serializable
@@ -89,6 +90,31 @@ data class Img2ImgCommandConfig(
     val steps: NullableValueOptions<UInt>? = null,
     val cfg: NullableValueOptions<Double>? = null,
     val displaySourceImageByDefault: Boolean = true,
+)
+
+@Serializable
+data class LoraConfig(
+    val tags: List<String> = emptyList(),
+    val installed: List<Lora> = emptyList(),
+)
+
+@Serializable
+data class Lora(
+    val id: String,
+    val name: String,
+    val url: String? = null,
+    val thumbnailUrl: String? = null,
+    val nsfw: Boolean = false,
+    val recommendedWeights: RecommendedWeights? = null,
+    val keywords: List<String> = emptyList(),
+    val tags: List<String> = emptyList(),
+)
+
+@Serializable
+data class RecommendedWeights(
+    val low: Double? = null,
+    val high: Double? = null,
+    val default: Double? = null,
 )
 
 @Serializable

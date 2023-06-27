@@ -28,7 +28,7 @@ import kotlin.random.nextUInt
 
 private val logger = KotlinLogging.logger {}
 
-class Txt2Img(
+class Txt2ImgCommand(
     private val client: SDClient,
     private val config: CommandsConfig,
 ) : ChatInputCommand {
