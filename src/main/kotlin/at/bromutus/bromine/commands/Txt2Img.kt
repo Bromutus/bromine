@@ -1,6 +1,7 @@
 package at.bromutus.bromine.commands
 
 import at.bromutus.bromine.AppColors
+import at.bromutus.bromine.AppConfig
 import at.bromutus.bromine.CommandsConfig
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
@@ -30,10 +31,13 @@ private val logger = KotlinLogging.logger {}
 
 class Txt2ImgCommand(
     private val client: SDClient,
-    private val config: CommandsConfig,
+    private val config: AppConfig,
 ) : ChatInputCommand {
     override val name = "txt2img"
     override val description = "Generate an image from text"
+
+    private val commandsConfig get() = config.commands
+    private val checkpoints get() = config.checkpoints.installed
 
     private object OptionNames {
         const val PROMPT = "prompt"
@@ -42,6 +46,7 @@ class Txt2ImgCommand(
         const val HEIGHT = "height"
         const val COUNT = "count"
         const val SEED = "seed"
+        const val CHECKPOINT = "checkpoint"
         const val STEPS = "steps"
         const val CFG = "cfg"
         const val HIRES_FACTOR = "hires-factor"
@@ -73,34 +78,34 @@ class Txt2ImgCommand(
                 name = OptionNames.WIDTH,
                 description = """
                     Width of the generated image in pixels (before hires-fix).
-                    Default: ${config.defaultWidth}.
+                    Default: ${commandsConfig.defaultWidth}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.minWidth.toLong()
-                maxValue = config.maxWidth.toLong()
+                minValue = commandsConfig.minWidth.toLong()
+                maxValue = commandsConfig.maxWidth.toLong()
             }
             integer(
                 name = OptionNames.HEIGHT,
                 description = """
                     Height of the generated image in pixels (before hires-fix).
-                    Default: ${config.defaultHeight}.
+                    Default: ${commandsConfig.defaultHeight}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.minHeight.toLong()
-                maxValue = config.maxHeight.toLong()
+                minValue = commandsConfig.minHeight.toLong()
+                maxValue = commandsConfig.maxHeight.toLong()
             }
             integer(
                 name = OptionNames.COUNT,
                 description = """
                     Number of images to generate.
-                    Default: ${config.defaultCount}.
+                    Default: ${commandsConfig.defaultCount}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.minCount.toLong()
-                maxValue = config.maxCount.toLong()
+                minValue = commandsConfig.minCount.toLong()
+                maxValue = commandsConfig.maxCount.toLong()
             }
             integer(
                 name = OptionNames.SEED,
@@ -111,28 +116,41 @@ class Txt2ImgCommand(
                 required = false
                 minValue = 0
             }
+            if (checkpoints.isNotEmpty()) {
+                string(
+                    name = OptionNames.CHECKPOINT,
+                    description = """
+                    Checkpoint to use.
+                    """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                    for (ckpt in checkpoints) {
+                        choice(name = ckpt.name, value = ckpt.id)
+                    }
+                }
+            }
             integer(
                 name = OptionNames.STEPS,
                 description = """
                     Number of diffusion steps.
-                    Default: ${config.defaultSteps}.
+                    Default: ${commandsConfig.defaultSteps}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.minSteps.toLong()
-                maxValue = config.maxSteps.toLong()
+                minValue = commandsConfig.minSteps.toLong()
+                maxValue = commandsConfig.maxSteps.toLong()
             }
             number(
                 name = OptionNames.CFG,
                 description = """
                     Classifier-free guidance.
                     High values increase guidance, but may lead to artifacts.
-                    Default: ${config.defaultCfg}.
+                    Default: ${commandsConfig.defaultCfg}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.minCfg
-                maxValue = config.maxCfg
+                minValue = commandsConfig.minCfg
+                maxValue = commandsConfig.maxCfg
             }
             number(
                 name = OptionNames.HIRES_FACTOR,
@@ -141,30 +159,30 @@ class Txt2ImgCommand(
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.minHiresFactor
-                maxValue = config.maxHiresFactor
+                minValue = commandsConfig.minHiresFactor
+                maxValue = commandsConfig.maxHiresFactor
             }
             integer(
                 name = OptionNames.HIRES_STEPS,
                 description = """
                     Number of diffusion steps for hires-fix (0 = same as steps).
-                    Default: ${config.defaultHiresSteps}.
+                    Default: ${commandsConfig.defaultHiresSteps}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.minHiresSteps.toLong()
-                maxValue = config.maxHiresSteps.toLong()
+                minValue = commandsConfig.minHiresSteps.toLong()
+                maxValue = commandsConfig.maxHiresSteps.toLong()
             }
             number(
                 name = OptionNames.HIRES_DENOISING,
                 description = """
                     Denoising strength for hires-fix.
-                    Default: ${config.defaultHiresDenoising}.
+                    Default: ${commandsConfig.defaultHiresDenoising}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                minValue = config.minHiresDenoising
-                maxValue = config.maxHiresDenoising
+                minValue = commandsConfig.minHiresDenoising
+                maxValue = commandsConfig.maxHiresDenoising
             }
         }
     }
@@ -187,38 +205,39 @@ class Txt2ImgCommand(
             val width = command.integers[OptionNames.WIDTH]?.toUInt()
             val height = command.integers[OptionNames.HEIGHT]?.toUInt()
             val count = command.integers[OptionNames.COUNT]?.toUInt()
-                ?: config.defaultCount
+                ?: commandsConfig.defaultCount
             val seed = command.integers[OptionNames.SEED]?.toUInt()
                 ?: Random.nextUInt()
-            val samplerName = config.defaultSampler
+            val checkpointId = command.strings[OptionNames.CHECKPOINT]
+                ?: commandsConfig.defaultCheckpoint
+            val samplerName = commandsConfig.defaultSampler
             val steps = command.integers[OptionNames.STEPS]?.toUInt()
-                ?: config.defaultSteps
+                ?: commandsConfig.defaultSteps
             val cfg = command.numbers[OptionNames.CFG]
-                ?: config.defaultCfg
+                ?: commandsConfig.defaultCfg
             val hiresFactor = command.numbers[OptionNames.HIRES_FACTOR]
-                ?: config.defaultHiresFactor
-            val hiresUpscaler = config.hiresUpscaler
+                ?: commandsConfig.defaultHiresFactor
+            val hiresUpscaler = commandsConfig.hiresUpscaler
             val hiresSteps = command.integers[OptionNames.HIRES_STEPS]?.toUInt()
-                ?: config.defaultHiresSteps
+                ?: commandsConfig.defaultHiresSteps
             val hiresDenoising = command.numbers[OptionNames.HIRES_DENOISING]
-                ?: config.defaultHiresDenoising
-            val checkpointName = config.defaultCheckpoint
+                ?: commandsConfig.defaultHiresDenoising
 
             val desiredSize = calculateDesiredImageSize(
                 specifiedWidth = width,
                 specifiedHeight = height,
-                defaultWidth = config.defaultWidth,
-                defaultHeight = config.defaultHeight,
+                defaultWidth = commandsConfig.defaultWidth,
+                defaultHeight = commandsConfig.defaultHeight,
             )
-            val size = desiredSize.constrainToPixelSize(config.maxPixels)
+            val size = desiredSize.constrainToPixelSize(this.commandsConfig.maxPixels)
 
             val isHiresFixDesired = hiresFactor > 1.0
             val scaledSize = size * hiresFactor
-            val doHiresFix = isHiresFixDesired && scaledSize.inPixels <= config.maxPixels
+            val doHiresFix = isHiresFixDesired && scaledSize.inPixels <= this.commandsConfig.maxPixels
 
             val params = Txt2ImgParams(
-                prompt = includeText(config.alwaysIncludedPrompt, prompt),
-                negativePrompt = includeText(config.alwaysIncludedNegativePrompt, negativePrompt),
+                prompt = includeText(this.commandsConfig.alwaysIncludedPrompt, prompt),
+                negativePrompt = includeText(this.commandsConfig.alwaysIncludedNegativePrompt, negativePrompt),
                 width = size.width,
                 height = size.height,
                 count = count,
@@ -230,7 +249,7 @@ class Txt2ImgCommand(
                 hiresSteps = hiresSteps,
                 hiresUpscaler = hiresUpscaler,
                 hiresDenoising = hiresDenoising,
-                checkpointName = checkpointName,
+                checkpointId = checkpointId,
             )
 
             val response = client.txt2img(params)
@@ -242,6 +261,8 @@ class Txt2ImgCommand(
             mainParams["Seed"] = "$seed"
 
             val otherParams = mutableMapOf<String, String>()
+            val checkpoint = checkpoints.find { it.id == checkpointId }
+            if (checkpoint != null) otherParams["Checkpoint"] = checkpoint.name
             otherParams["Steps"] = "$steps"
             otherParams["CFG"] = "$cfg"
             if (doHiresFix) {

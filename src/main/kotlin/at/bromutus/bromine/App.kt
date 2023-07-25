@@ -22,8 +22,8 @@ suspend fun main() {
     val kord = Kord(config.discord.token)
 
     val commands = listOf(
-        Txt2ImgCommand(sdClient, config.commands),
-        Img2ImgCommand(sdClient, config.commands),
+        Txt2ImgCommand(sdClient, config),
+        Img2ImgCommand(sdClient, config),
         LoraCommand(config.lora, nsfw = false),
         LoraCommand(config.lora, nsfw = true),
     )

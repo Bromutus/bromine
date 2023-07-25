@@ -94,7 +94,7 @@ data class Txt2ImgParams(
     val hiresSteps: UInt,
     val hiresUpscaler: String,
     val hiresDenoising: Double,
-    val checkpointName: String?,
+    val checkpointId: String?,
 )
 
 data class Img2ImgParams(
@@ -110,7 +110,7 @@ data class Img2ImgParams(
     val samplerName: String,
     val steps: UInt,
     val cfg: Double,
-    val checkpointName: String?,
+    val checkpointId: String?,
 )
 
 enum class ResizeMode(val intValue: UInt) {
@@ -191,7 +191,7 @@ data class Txt2ImgRequest(
             denoisingStrength = params.hiresDenoising,
             overrideSettings = JsonObject(
                 mutableMapOf<String, JsonElement>().apply {
-                    params.checkpointName?.let { this["sd_model_checkpoint"] = JsonPrimitive(it) }
+                    params.checkpointId?.let { this["sd_model_checkpoint"] = JsonPrimitive(it) }
                 }
             ),
             saveImages = true,
@@ -263,7 +263,7 @@ data class Img2ImgRequest(
             cfgScale = params.cfg,
             overrideSettings = JsonObject(
                 mapOf(
-                    "sd_model_checkpoint" to JsonPrimitive(params.checkpointName),
+                    "sd_model_checkpoint" to JsonPrimitive(params.checkpointId),
                 )
             ),
             saveImages = true,

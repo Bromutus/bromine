@@ -24,6 +24,7 @@ data class AppConfig(
     val sd: SDConfig,
     val commands: CommandsConfig = CommandsConfig(),
     val lora: LoraConfig = LoraConfig(),
+    val checkpoints: CheckpointConfig = CheckpointConfig(),
 )
 
 @Serializable
@@ -115,6 +116,17 @@ data class RecommendedWeights(
     val low: Double? = null,
     val high: Double? = null,
     val default: Double? = null,
+)
+
+@Serializable
+data class CheckpointConfig(
+    val installed: List<Checkpoint> = emptyList(),
+)
+
+@Serializable
+data class Checkpoint(
+    val id: String,
+    val name: String,
 )
 
 @Serializable
