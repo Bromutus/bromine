@@ -423,10 +423,8 @@ class Img2ImgCommand(
             }
             val outputImages = images.take(count.toInt())
             val extraImages = images.drop(count.toInt())
-            val controlnetImages = if (controlnets.isNotEmpty()) {
-                extraImages.zip(controlnets)
-            } else {
-                emptyList()
+            val controlnetImages = controlnets.mapIndexed { index, net ->
+                net to extraImages.getOrNull(index)
             }
 
             initialResponse.edit {
@@ -452,11 +450,13 @@ class Img2ImgCommand(
                         ByteReadChannel(Base64.decode(img))
                     })
                 }
-                controlnetImages.forEachIndexed { index, (img, net) ->
+                controlnetImages.forEachIndexed { index, (net, img) ->
                     val fileName = "controlnet${index + 1}.png"
-                    addFile(fileName, ChannelProvider {
-                        ByteReadChannel(Base64.decode(img))
-                    })
+                    if (img != null) {
+                        addFile(fileName, ChannelProvider {
+                            ByteReadChannel(Base64.decode(img))
+                        })
+                    }
                     embed {
                         title = "ControlNet Unit ${index + 1}"
                         description = listOf(
@@ -464,8 +464,10 @@ class Img2ImgCommand(
                             "**Weight**: ${net.weight}",
                         ).joinToString("\n")
                         color = AppColors.success
-                        thumbnail {
-                            url = "attachment://$fileName"
+                        if (img != null) {
+                            thumbnail {
+                                url = "attachment://$fileName"
+                            }
                         }
                     }
                 }

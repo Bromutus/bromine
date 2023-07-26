@@ -115,6 +115,7 @@ data class ControlnetConfig(
 data class Controlnet(
     val name: String,
     val params: ControlnetParams = ControlnetParams(),
+    val supportsHiresFix: Boolean = true,
 )
 
 @Serializable
