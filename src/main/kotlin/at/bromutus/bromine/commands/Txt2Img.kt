@@ -396,10 +396,10 @@ class Txt2ImgCommand(
             if (negativePrompt != null) mainParams["Negative prompt"] = negativePrompt
             mainParams["Size"] = if (doHiresFix) "$scaledSize (scaled up from $size)" else "$scaledSize"
             mainParams["Seed"] = "$seed"
+            val checkpoint = checkpoints.find { it.id == checkpointId }
+            if (checkpoint != null) mainParams["Checkpoint"] = checkpoint.name
 
             val otherParams = mutableMapOf<String, String>()
-            val checkpoint = checkpoints.find { it.id == checkpointId }
-            if (checkpoint != null) otherParams["Checkpoint"] = checkpoint.name
             otherParams["Steps"] = "$steps"
             otherParams["CFG"] = "$cfg"
             if (doHiresFix) {

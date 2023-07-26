@@ -412,10 +412,10 @@ class Img2ImgCommand(
             if (negativePrompt != null) mainParams["Negative prompt"] = negativePrompt
             mainParams["Size"] = "$size"
             mainParams["Seed"] = "$seed"
+            val checkpoint = checkpoints.find { it.id == checkpointId }
+            if (checkpoint != null) mainParams["Checkpoint"] = checkpoint.name
 
             val otherParams = mutableMapOf<String, String>()
-            val checkpoint = checkpoints.find { it.id == checkpointId }
-            if (checkpoint != null) otherParams["Checkpoint"] = checkpoint.name
             otherParams["Steps"] = "$steps"
             otherParams["CFG"] = "$cfg"
             otherParams["Denoising strength"] = "$denoisingStrength"
