@@ -1,5 +1,6 @@
 package at.bromutus.bromine
 
+import at.bromutus.bromine.appdata.loadAppConfig
 import at.bromutus.bromine.commands.*
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException

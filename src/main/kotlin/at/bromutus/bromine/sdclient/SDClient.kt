@@ -1,6 +1,6 @@
 package at.bromutus.bromine.sdclient
 
-import at.bromutus.bromine.Controlnet
+import at.bromutus.bromine.appdata.Controlnet
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.*
 import io.ktor.client.call.*

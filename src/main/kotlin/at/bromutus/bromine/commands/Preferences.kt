@@ -1,7 +1,7 @@
 package at.bromutus.bromine.commands
 
 import at.bromutus.bromine.AppColors
-import at.bromutus.bromine.AppConfig
+import at.bromutus.bromine.appdata.AppConfig
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
 import at.bromutus.bromine.appdata.UserPreferences

@@ -1,8 +1,8 @@
 package at.bromutus.bromine.commands
 
 import at.bromutus.bromine.AppColors
-import at.bromutus.bromine.AppConfig
-import at.bromutus.bromine.CommandsConfig
+import at.bromutus.bromine.appdata.AppConfig
+import at.bromutus.bromine.appdata.CommandsConfig
 import at.bromutus.bromine.appdata.readUserPreferences
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException

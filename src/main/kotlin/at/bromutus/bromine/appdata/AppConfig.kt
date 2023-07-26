@@ -1,13 +1,19 @@
-package at.bromutus.bromine
+package at.bromutus.bromine.appdata
 
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.decodeFromStream
 import kotlinx.serialization.Serializable
 import java.io.FileInputStream
+import kotlin.io.path.Path
 
 fun loadAppConfig(): AppConfig {
     val configFileName = "application.yaml"
     val stream = System.getenv("BROMINE_APPCONFIG")?.let(::FileInputStream)
+        ?: try {
+            Path(APP_DATA_DIR, configFileName).toFile().inputStream()
+        } catch (e: Exception) {
+            null
+        }
         ?: try {
             FileInputStream(configFileName)
         } catch (e: Exception) {
@@ -15,7 +21,7 @@ fun loadAppConfig(): AppConfig {
         }
         ?: object {}::class.java.classLoader.getResourceAsStream(configFileName)
         ?: throw IllegalStateException("Could not find $configFileName. Please create it in the working directory or set the BROMINE_APPCONFIG environment variable.")
-    return Yaml.default.decodeFromStream(stream)
+    return stream.use { Yaml.default.decodeFromStream(it) }
 }
 
 @Serializable

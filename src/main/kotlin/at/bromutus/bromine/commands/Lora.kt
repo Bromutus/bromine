@@ -1,8 +1,8 @@
 package at.bromutus.bromine.commands
 
 import at.bromutus.bromine.AppColors
-import at.bromutus.bromine.Lora
-import at.bromutus.bromine.LoraConfig
+import at.bromutus.bromine.appdata.Lora
+import at.bromutus.bromine.appdata.LoraConfig
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
