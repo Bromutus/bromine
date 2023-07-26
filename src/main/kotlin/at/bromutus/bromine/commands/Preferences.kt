@@ -117,7 +117,7 @@ class PreferencesCommand(
     }
 
     override suspend fun handleInteraction(interaction: ChatInputCommandInteraction) {
-        val initialResponse = interaction.deferPublicResponse()
+        val initialResponse = interaction.deferEphemeralResponse()
 
         try {
             val command = interaction.command as? SubCommand
