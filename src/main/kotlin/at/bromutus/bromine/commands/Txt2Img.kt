@@ -3,6 +3,7 @@ package at.bromutus.bromine.commands
 import at.bromutus.bromine.AppColors
 import at.bromutus.bromine.AppConfig
 import at.bromutus.bromine.CommandsConfig
+import at.bromutus.bromine.appdata.readUserPreferences
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
@@ -274,21 +275,33 @@ class Txt2ImgCommand(
 
         try {
             val command = interaction.command
+            val preferences by lazy { readUserPreferences(interaction.user.tag) }
 
-            val prompt = command.strings[OptionNames.PROMPT]
-            val negativePrompt = command.strings[OptionNames.NEGATIVE_PROMPT]
+            val prompt = includeText(
+                preferences.promptPrefix,
+                command.strings[OptionNames.PROMPT],
+            )
+            val negativePrompt = includeText(
+                preferences.negativePromptPrefix,
+                command.strings[OptionNames.NEGATIVE_PROMPT],
+            )
             val width = command.integers[OptionNames.WIDTH]?.toUInt()
+                ?: preferences.width
             val height = command.integers[OptionNames.HEIGHT]?.toUInt()
+                ?: preferences.height
             val count = command.integers[OptionNames.COUNT]?.toUInt()
+                ?: preferences.count
                 ?: commandsConfig.defaultCount
             val seed = command.integers[OptionNames.SEED]?.toUInt()
                 ?: Random.nextUInt()
             val checkpointId = command.strings[OptionNames.CHECKPOINT]
+                ?: preferences.checkpoint?.takeIf { id -> checkpoints.any { it.id == id } }
                 ?: commandsConfig.defaultCheckpoint
             val samplerName = commandsConfig.defaultSampler
             val steps = command.integers[OptionNames.STEPS]?.toUInt()
                 ?: commandsConfig.defaultSteps
             val cfg = command.numbers[OptionNames.CFG]
+                ?: preferences.cfg
                 ?: commandsConfig.defaultCfg
             val hiresFactor = command.numbers[OptionNames.HIRES_FACTOR]
                 ?: commandsConfig.defaultHiresFactor
@@ -319,8 +332,8 @@ class Txt2ImgCommand(
                 downloadImageAsBase64(it.url, it.contentType!!)
             }
             val controlnet2Type = command.strings[OptionNames.CONTROLNET2_TYPE]
-                    ?.let { type -> controlnetTypes.find { it.name == type } }
-                    ?: controlnetTypes.first()
+                ?.let { type -> controlnetTypes.find { it.name == type } }
+                ?: controlnetTypes.first()
             val controlnet2Weight = command.numbers[OptionNames.CONTROLNET2_WEIGHT]
                 ?: config.controlnet.weight.default
 
@@ -344,18 +357,22 @@ class Txt2ImgCommand(
 
             val controlnets = buildList {
                 if (controlnet1Image != null) {
-                    add(ControlnetUnitParams(
-                        image = controlnet1Image,
-                        type = controlnet1Type,
-                        weight = controlnet1Weight,
-                    ))
+                    add(
+                        ControlnetUnitParams(
+                            image = controlnet1Image,
+                            type = controlnet1Type,
+                            weight = controlnet1Weight,
+                        )
+                    )
                 }
                 if (controlnet2Image != null) {
-                    add(ControlnetUnitParams(
-                        image = controlnet2Image,
-                        type = controlnet2Type,
-                        weight = controlnet2Weight,
-                    ))
+                    add(
+                        ControlnetUnitParams(
+                            image = controlnet2Image,
+                            type = controlnet2Type,
+                            weight = controlnet2Weight,
+                        )
+                    )
                 }
             }
 

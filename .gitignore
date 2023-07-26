@@ -41,3 +41,6 @@ application-*.yaml
 
 ### .env ###
 *.env
+
+### App Data ###
+data/

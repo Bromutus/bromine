@@ -3,6 +3,7 @@ package at.bromutus.bromine.commands
 import at.bromutus.bromine.AppColors
 import at.bromutus.bromine.AppConfig
 import at.bromutus.bromine.CommandsConfig
+import at.bromutus.bromine.appdata.readUserPreferences
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
@@ -291,6 +292,7 @@ class Img2ImgCommand(
 
         try {
             val command = interaction.command
+            val preferences by lazy { readUserPreferences(interaction.user.tag) }
 
             val attachment = command.attachments[OptionNames.IMAGE]!!
             if (!attachment.isImage || attachment.contentType == null) {
@@ -299,11 +301,20 @@ class Img2ImgCommand(
             val originalImageUrl = attachment.url
             val image = downloadImageAsBase64(originalImageUrl, attachment.contentType!!)
 
-            val prompt = command.strings[OptionNames.PROMPT]
-            val negativePrompt = command.strings[OptionNames.NEGATIVE_PROMPT]
+            val prompt = includeText(
+                preferences.promptPrefix,
+                command.strings[OptionNames.PROMPT],
+            )
+            val negativePrompt = includeText(
+                preferences.negativePromptPrefix,
+                command.strings[OptionNames.NEGATIVE_PROMPT],
+            )
             val width = command.integers[OptionNames.WIDTH]?.toUInt()
+                ?: preferences.width
             val height = command.integers[OptionNames.HEIGHT]?.toUInt()
+                ?: preferences.height
             val count = command.integers[OptionNames.COUNT]?.toUInt()
+                ?: preferences.count
                 ?: commandsConfig.defaultCount
             val denoisingStrength = command.numbers[OptionNames.DENOISING_STRENGTH]
                 ?: commandsConfig.defaultDenoisingStrength
@@ -313,11 +324,13 @@ class Img2ImgCommand(
             val seed = command.integers[OptionNames.SEED]?.toUInt()
                 ?: Random.nextUInt()
             val checkpointId = command.strings[OptionNames.CHECKPOINT]
+                ?: preferences.checkpoint?.takeIf { id -> checkpoints.any { it.id == id } }
                 ?: commandsConfig.defaultCheckpoint
             val samplerName = commandsConfig.defaultSampler
             val steps = command.integers[OptionNames.STEPS]?.toUInt()
                 ?: commandsConfig.defaultSteps
             val cfg = command.numbers[OptionNames.CFG]
+                ?: preferences.cfg
                 ?: commandsConfig.defaultCfg
 
             val controlnet1Attachment = command.attachments[OptionNames.CONTROLNET1_IMAGE]

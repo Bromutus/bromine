@@ -26,6 +26,7 @@ suspend fun main() {
         Img2ImgCommand(sdClient, config),
         LoraCommand(config.lora, nsfw = false),
         LoraCommand(config.lora, nsfw = true),
+        PreferencesCommand(config),
     )
 
     kord.createCommands(commands)
