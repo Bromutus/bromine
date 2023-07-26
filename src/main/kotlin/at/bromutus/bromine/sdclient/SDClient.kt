@@ -11,10 +11,7 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.*
 
 private val logger = KotlinLogging.logger {}
 
@@ -90,11 +87,30 @@ data class Txt2ImgParams(
     val samplerName: String,
     val steps: UInt,
     val cfg: Double,
-    val hiresFactor: Double?,
-    val hiresSteps: UInt,
-    val hiresUpscaler: String,
-    val hiresDenoising: Double,
+    val hires: HiresParams?,
     val checkpointId: String?,
+    val controlnets: List<ControlnetParams> = emptyList(),
+)
+
+data class HiresParams(
+    val factor: Double,
+    val steps: UInt,
+    val upscaler: String,
+    val denoising: Double,
+)
+
+data class ControlnetParams(
+    val image: String,
+    val type: ControlnetTypeParams,
+    val weight: Double,
+)
+
+data class ControlnetTypeParams(
+    val model: String? = null,
+    val module: String? = null,
+    val processorRes: UInt? = null,
+    val thresholdA: Double? = null,
+    val thresholdB: Double? = null,
 )
 
 data class Img2ImgParams(
@@ -111,6 +127,7 @@ data class Img2ImgParams(
     val steps: UInt,
     val cfg: Double,
     val checkpointId: String?,
+    val controlnets: List<ControlnetParams> = emptyList(),
 )
 
 enum class ResizeMode(val intValue: UInt) {
@@ -184,16 +201,36 @@ data class Txt2ImgRequest(
             samplerName = params.samplerName,
             steps = params.steps,
             cfgScale = params.cfg,
-            enableHr = params.hiresFactor != null && params.hiresFactor > 1.0,
-            hrScale = params.hiresFactor,
-            hrSecondPassSteps = params.hiresSteps.toInt(),
-            hrUpscaler = params.hiresUpscaler,
-            denoisingStrength = params.hiresDenoising,
-            overrideSettings = JsonObject(
-                mutableMapOf<String, JsonElement>().apply {
-                    params.checkpointId?.let { this["sd_model_checkpoint"] = JsonPrimitive(it) }
+            enableHr = params.hires != null,
+            hrScale = params.hires?.factor,
+            hrSecondPassSteps = params.hires?.steps?.toInt(),
+            hrUpscaler = params.hires?.upscaler,
+            denoisingStrength = params.hires?.denoising,
+            overrideSettings = buildJsonObject {
+                if (params.checkpointId != null) {
+                    put("sd_model_checkpoint", params.checkpointId)
                 }
-            ),
+            },
+            alwaysOnScripts = buildJsonObject {
+                if (params.controlnets.isNotEmpty()) {
+                    putJsonObject("controlnet") {
+                        putJsonArray("args") {
+                            for (controlnet in params.controlnets) {
+                                val type = controlnet.type
+                                addJsonObject {
+                                    put("input_image", controlnet.image)
+                                    if (type.module != null) put("module", type.module)
+                                    if (type.model != null) put("model", type.model)
+                                    put("weight", controlnet.weight)
+                                    if (type.processorRes != null) put("processor_res", type.processorRes.toInt())
+                                    if (type.thresholdA != null) put("threshold_a", type.thresholdA)
+                                    if (type.thresholdB != null) put("threshold_b", type.thresholdB)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             saveImages = true,
         )
     }
@@ -261,11 +298,31 @@ data class Img2ImgRequest(
             samplerName = params.samplerName,
             steps = params.steps,
             cfgScale = params.cfg,
-            overrideSettings = JsonObject(
-                mapOf(
-                    "sd_model_checkpoint" to JsonPrimitive(params.checkpointId),
-                )
-            ),
+            overrideSettings = buildJsonObject {
+                if (params.checkpointId != null) {
+                    put("sd_model_checkpoint", params.checkpointId)
+                }
+            },
+            alwaysOnScripts = buildJsonObject {
+                if (params.controlnets.isNotEmpty()) {
+                    putJsonObject("controlnet") {
+                        putJsonArray("args") {
+                            for (controlnet in params.controlnets) {
+                                val type = controlnet.type
+                                addJsonObject {
+                                    put("input_image", controlnet.image)
+                                    if (type.module != null) put("module", type.module)
+                                    if (type.model != null) put("model", type.model)
+                                    put("weight", controlnet.weight)
+                                    if (type.processorRes != null) put("processor_res", type.processorRes.toInt())
+                                    if (type.thresholdA != null) put("threshold_a", type.thresholdA)
+                                    if (type.thresholdB != null) put("threshold_b", type.thresholdB)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             saveImages = true,
         )
     }

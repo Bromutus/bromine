@@ -23,8 +23,9 @@ data class AppConfig(
     val discord: DiscordConfig,
     val sd: SDConfig,
     val commands: CommandsConfig = CommandsConfig(),
-    val lora: LoraConfig = LoraConfig(),
     val checkpoints: CheckpointConfig = CheckpointConfig(),
+    val controlnet: ControlnetConfig = ControlnetConfig(),
+    val lora: LoraConfig = LoraConfig(),
 )
 
 @Serializable
@@ -94,6 +95,38 @@ data class Img2ImgCommandConfig(
 )
 
 @Serializable
+data class CheckpointConfig(
+    val installed: List<Checkpoint> = emptyList(),
+)
+
+@Serializable
+data class Checkpoint(
+    val id: String,
+    val name: String,
+)
+
+@Serializable
+data class ControlnetConfig(
+    val weight: ValueOptions<Double> = ValueOptions(0.0, 2.0, 1.0),
+    val installed: List<Controlnet> = emptyList(),
+)
+
+@Serializable
+data class Controlnet(
+    val name: String,
+    val params: ControlnetParams = ControlnetParams(),
+)
+
+@Serializable
+data class ControlnetParams(
+    val model: String? = null,
+    val module: String? = null,
+    val processorRes: UInt? = null,
+    val thresholdA: Double? = null,
+    val thresholdB: Double? = null,
+)
+
+@Serializable
 data class LoraConfig(
     val tags: List<String> = emptyList(),
     val installed: List<Lora> = emptyList(),
@@ -116,17 +149,6 @@ data class RecommendedWeights(
     val low: Double? = null,
     val high: Double? = null,
     val default: Double? = null,
-)
-
-@Serializable
-data class CheckpointConfig(
-    val installed: List<Checkpoint> = emptyList(),
-)
-
-@Serializable
-data class Checkpoint(
-    val id: String,
-    val name: String,
 )
 
 @Serializable

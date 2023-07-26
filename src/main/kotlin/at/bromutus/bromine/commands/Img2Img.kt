@@ -6,6 +6,7 @@ import at.bromutus.bromine.CommandsConfig
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
+import at.bromutus.bromine.sdclient.ControlnetTypeParams
 import at.bromutus.bromine.sdclient.Img2ImgParams
 import at.bromutus.bromine.sdclient.ResizeMode
 import at.bromutus.bromine.sdclient.SDClient
@@ -42,6 +43,7 @@ class Img2ImgCommand(
 
     private val commandsConfig get() = config.commands
     private val checkpoints get() = config.checkpoints.installed
+    private val controlnetTypes get() = config.controlnet.installed
 
     private object OptionNames {
         const val IMAGE = "image"
@@ -56,6 +58,12 @@ class Img2ImgCommand(
         const val CHECKPOINT = "checkpoint"
         const val STEPS = "steps"
         const val CFG = "cfg"
+        const val CONTROLNET1_IMAGE = "controlnet1-image"
+        const val CONTROLNET1_TYPE = "controlnet1-type"
+        const val CONTROLNET1_WEIGHT = "controlnet1-weight"
+        const val CONTROLNET2_IMAGE = "controlnet2-image"
+        const val CONTROLNET2_TYPE = "controlnet2-type"
+        const val CONTROLNET2_WEIGHT = "controlnet2-weight"
         const val DISPLAY_SOURCE = "display-source"
     }
 
@@ -195,6 +203,72 @@ class Img2ImgCommand(
                 minValue = commandsConfig.minCfg
                 maxValue = commandsConfig.maxCfg
             }
+            if (controlnetTypes.isNotEmpty()) {
+                attachment(
+                    name = OptionNames.CONTROLNET1_IMAGE,
+                    description = """
+                        Image to use for ControlNet 1.
+                        Enables ControlNet 1.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                }
+                string(
+                    name = OptionNames.CONTROLNET1_TYPE,
+                    description = """
+                        Type of ControlNet 1.
+                        Default: ${controlnetTypes.first().name}.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                    for (controlnet in controlnetTypes) {
+                        choice(name = controlnet.name, value = controlnet.name)
+                    }
+                }
+                number(
+                    name = OptionNames.CONTROLNET1_WEIGHT,
+                    description = """
+                        Weight of ControlNet 1.
+                        Default: ${config.controlnet.weight.default}.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                    minValue = config.controlnet.weight.min
+                    maxValue = config.controlnet.weight.max
+                }
+                attachment(
+                    name = OptionNames.CONTROLNET2_IMAGE,
+                    description = """
+                        Image to use for ControlNet 2.
+                        Enables ControlNet 2.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                }
+                string(
+                    name = OptionNames.CONTROLNET2_TYPE,
+                    description = """
+                        Type of ControlNet 2.
+                        Default: ${controlnetTypes.first().name}.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                    for (controlnet in controlnetTypes) {
+                        choice(name = controlnet.name, value = controlnet.name)
+                    }
+                }
+                number(
+                    name = OptionNames.CONTROLNET2_WEIGHT,
+                    description = """
+                        Weight of ControlNet 2.
+                        Default: ${config.controlnet.weight.default}.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                    minValue = config.controlnet.weight.min
+                    maxValue = config.controlnet.weight.max
+                }
+            }
             boolean(
                 name = OptionNames.DISPLAY_SOURCE,
                 description = """
@@ -246,6 +320,32 @@ class Img2ImgCommand(
             val cfg = command.numbers[OptionNames.CFG]
                 ?: commandsConfig.defaultCfg
 
+            val controlnet1Attachment = command.attachments[OptionNames.CONTROLNET1_IMAGE]
+            val controlnet1Image = controlnet1Attachment?.let {
+                if (!it.isImage || it.contentType == null) {
+                    throw CommandException("ControlNet 1 image must be an image")
+                }
+                downloadImageAsBase64(it.url, it.contentType!!)
+            }
+            val controlnet1Type = command.strings[OptionNames.CONTROLNET1_TYPE]
+                ?.let { type -> controlnetTypes.find { it.name == type } }
+                ?: controlnetTypes.first()
+            val controlnet1Weight = command.numbers[OptionNames.CONTROLNET1_WEIGHT]
+                ?: config.controlnet.weight.default
+
+            val controlnet2Attachment = command.attachments[OptionNames.CONTROLNET2_IMAGE]
+            val controlnet2Image = controlnet2Attachment?.let {
+                if (!it.isImage || it.contentType == null) {
+                    throw CommandException("ControlNet 2 image must be an image")
+                }
+                downloadImageAsBase64(it.url, it.contentType!!)
+            }
+            val controlnet2Type = command.strings[OptionNames.CONTROLNET2_TYPE]
+                ?.let { type -> controlnetTypes.find { it.name == type } }
+                ?: controlnetTypes.first()
+            val controlnet2Weight = command.numbers[OptionNames.CONTROLNET2_WEIGHT]
+                ?: config.controlnet.weight.default
+
             val displaySource = command.booleans[OptionNames.DISPLAY_SOURCE]
                 ?: commandsConfig.displaySourceImageByDefault
 
@@ -258,6 +358,35 @@ class Img2ImgCommand(
                 defaultHeight = commandsConfig.defaultHeight,
             )
             val size = desiredSize.constrainToPixelSize(commandsConfig.maxPixels)
+
+            val controlnets = buildList {
+                if (controlnet1Image != null) {
+                    add(at.bromutus.bromine.sdclient.ControlnetParams(
+                        image = controlnet1Image,
+                        type = ControlnetTypeParams(
+                            model = controlnet1Type.params.model,
+                            module = controlnet1Type.params.module,
+                            processorRes = controlnet1Type.params.processorRes,
+                            thresholdA = controlnet1Type.params.thresholdA,
+                            thresholdB = controlnet1Type.params.thresholdB,
+                        ),
+                        weight = controlnet1Weight,
+                    ))
+                }
+                if (controlnet2Image != null) {
+                    add(at.bromutus.bromine.sdclient.ControlnetParams(
+                        image = controlnet2Image,
+                        type = ControlnetTypeParams(
+                            model = controlnet2Type.params.model,
+                            module = controlnet2Type.params.module,
+                            processorRes = controlnet2Type.params.processorRes,
+                            thresholdA = controlnet2Type.params.thresholdA,
+                            thresholdB = controlnet2Type.params.thresholdB,
+                        ),
+                        weight = controlnet2Weight,
+                    ))
+                }
+            }
 
             val params = Img2ImgParams(
                 image = image,
@@ -273,6 +402,7 @@ class Img2ImgCommand(
                 steps = steps,
                 cfg = cfg,
                 checkpointId = checkpointId,
+                controlnets = controlnets,
             )
 
             val response = client.img2img(params)
@@ -290,13 +420,19 @@ class Img2ImgCommand(
             otherParams["CFG"] = "$cfg"
             otherParams["Denoising strength"] = "$denoisingStrength"
             otherParams["Resize mode"] = resizeMode.resizeModeText()
+            if (controlnet1Image != null) {
+                otherParams["ControlNet 1"] = "${controlnet1Type.name} (Weight: ${controlnet1Weight})"
+            }
+            if (controlnet2Image != null) {
+                otherParams["ControlNet 2"] = "${controlnet2Type.name} (Weight: ${controlnet2Weight})"
+            }
 
             val warnings = mutableListOf<String>()
             if (desiredSize.inPixels > size.inPixels) {
                 warnings.add("$desiredSize was reduced to $size due to size constraints.")
             }
 
-            val images = if (response.images.size > 1) {
+            val images = if (count > 1u) {
                 // The first image is a grid containing all the generated images
                 // We can remove it
                 response.images.drop(1)

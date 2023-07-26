@@ -3,8 +3,11 @@ package at.bromutus.bromine.commands
 import at.bromutus.bromine.AppColors
 import at.bromutus.bromine.AppConfig
 import at.bromutus.bromine.CommandsConfig
+import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
+import at.bromutus.bromine.sdclient.ControlnetTypeParams
+import at.bromutus.bromine.sdclient.HiresParams
 import at.bromutus.bromine.sdclient.SDClient
 import at.bromutus.bromine.sdclient.Txt2ImgParams
 import at.bromutus.bromine.utils.calculateDesiredImageSize
@@ -13,15 +16,17 @@ import at.bromutus.bromine.utils.includeText
 import dev.kord.core.behavior.interaction.respondPublic
 import dev.kord.core.behavior.interaction.response.edit
 import dev.kord.core.entity.interaction.ChatInputCommandInteraction
-import dev.kord.rest.builder.interaction.ChatInputCreateBuilder
-import dev.kord.rest.builder.interaction.integer
-import dev.kord.rest.builder.interaction.number
-import dev.kord.rest.builder.interaction.string
+import dev.kord.rest.builder.interaction.*
 import dev.kord.rest.builder.message.create.embed
 import dev.kord.rest.builder.message.modify.embed
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
+import io.ktor.client.statement.*
 import io.ktor.utils.io.*
+import io.ktor.utils.io.core.*
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
@@ -38,6 +43,7 @@ class Txt2ImgCommand(
 
     private val commandsConfig get() = config.commands
     private val checkpoints get() = config.checkpoints.installed
+    private val controlnetTypes get() = config.controlnet.installed
 
     private object OptionNames {
         const val PROMPT = "prompt"
@@ -52,6 +58,12 @@ class Txt2ImgCommand(
         const val HIRES_FACTOR = "hires-factor"
         const val HIRES_STEPS = "hires-steps"
         const val HIRES_DENOISING = "hires-denoising"
+        const val CONTROLNET1_IMAGE = "controlnet1-image"
+        const val CONTROLNET1_TYPE = "controlnet1-type"
+        const val CONTROLNET1_WEIGHT = "controlnet1-weight"
+        const val CONTROLNET2_IMAGE = "controlnet2-image"
+        const val CONTROLNET2_TYPE = "controlnet2-type"
+        const val CONTROLNET2_WEIGHT = "controlnet2-weight"
     }
 
     override suspend fun buildCommand(builder: ChatInputCreateBuilder) {
@@ -184,6 +196,72 @@ class Txt2ImgCommand(
                 minValue = commandsConfig.minHiresDenoising
                 maxValue = commandsConfig.maxHiresDenoising
             }
+            if (controlnetTypes.isNotEmpty()) {
+                attachment(
+                    name = OptionNames.CONTROLNET1_IMAGE,
+                    description = """
+                        Image to use for ControlNet 1.
+                        Enables ControlNet 1.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                }
+                string(
+                    name = OptionNames.CONTROLNET1_TYPE,
+                    description = """
+                        Type of ControlNet 1.
+                        Default: ${controlnetTypes.first().name}.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                    for (controlnet in controlnetTypes) {
+                        choice(name = controlnet.name, value = controlnet.name)
+                    }
+                }
+                number(
+                    name = OptionNames.CONTROLNET1_WEIGHT,
+                    description = """
+                        Weight of ControlNet 1.
+                        Default: ${config.controlnet.weight.default}.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                    minValue = config.controlnet.weight.min
+                    maxValue = config.controlnet.weight.max
+                }
+                attachment(
+                    name = OptionNames.CONTROLNET2_IMAGE,
+                    description = """
+                        Image to use for ControlNet 2.
+                        Enables ControlNet 2.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                }
+                string(
+                    name = OptionNames.CONTROLNET2_TYPE,
+                    description = """
+                        Type of ControlNet 2.
+                        Default: ${controlnetTypes.first().name}.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                    for (controlnet in controlnetTypes) {
+                        choice(name = controlnet.name, value = controlnet.name)
+                    }
+                }
+                number(
+                    name = OptionNames.CONTROLNET2_WEIGHT,
+                    description = """
+                        Weight of ControlNet 2.
+                        Default: ${config.controlnet.weight.default}.
+                        """.trimIndent().replace("\n", " ")
+                ) {
+                    required = false
+                    minValue = config.controlnet.weight.min
+                    maxValue = config.controlnet.weight.max
+                }
+            }
         }
     }
 
@@ -223,6 +301,32 @@ class Txt2ImgCommand(
             val hiresDenoising = command.numbers[OptionNames.HIRES_DENOISING]
                 ?: commandsConfig.defaultHiresDenoising
 
+            val controlnet1Attachment = command.attachments[OptionNames.CONTROLNET1_IMAGE]
+            val controlnet1Image = controlnet1Attachment?.let {
+                if (!it.isImage || it.contentType == null) {
+                    throw CommandException("ControlNet 1 image must be an image")
+                }
+                downloadImageAsBase64(it.url, it.contentType!!)
+            }
+            val controlnet1Type = command.strings[OptionNames.CONTROLNET1_TYPE]
+                ?.let { type -> controlnetTypes.find { it.name == type } }
+                ?: controlnetTypes.first()
+            val controlnet1Weight = command.numbers[OptionNames.CONTROLNET1_WEIGHT]
+                ?: config.controlnet.weight.default
+
+            val controlnet2Attachment = command.attachments[OptionNames.CONTROLNET2_IMAGE]
+            val controlnet2Image = controlnet2Attachment?.let {
+                if (!it.isImage || it.contentType == null) {
+                    throw CommandException("ControlNet 2 image must be an image")
+                }
+                downloadImageAsBase64(it.url, it.contentType!!)
+            }
+            val controlnet2Type = command.strings[OptionNames.CONTROLNET2_TYPE]
+                    ?.let { type -> controlnetTypes.find { it.name == type } }
+                    ?: controlnetTypes.first()
+            val controlnet2Weight = command.numbers[OptionNames.CONTROLNET2_WEIGHT]
+                ?: config.controlnet.weight.default
+
             val desiredSize = calculateDesiredImageSize(
                 specifiedWidth = width,
                 specifiedHeight = height,
@@ -234,6 +338,41 @@ class Txt2ImgCommand(
             val isHiresFixDesired = hiresFactor > 1.0
             val scaledSize = size * hiresFactor
             val doHiresFix = isHiresFixDesired && scaledSize.inPixels <= this.commandsConfig.maxPixels
+            val hires = if (doHiresFix) HiresParams(
+                factor = hiresFactor,
+                steps = hiresSteps,
+                upscaler = hiresUpscaler,
+                denoising = hiresDenoising,
+            ) else null
+
+            val controlnets = buildList {
+                if (controlnet1Image != null) {
+                    add(at.bromutus.bromine.sdclient.ControlnetParams(
+                        image = controlnet1Image,
+                        type = ControlnetTypeParams(
+                            model = controlnet1Type.params.model,
+                            module = controlnet1Type.params.module,
+                            processorRes = controlnet1Type.params.processorRes,
+                            thresholdA = controlnet1Type.params.thresholdA,
+                            thresholdB = controlnet1Type.params.thresholdB,
+                        ),
+                        weight = controlnet1Weight,
+                    ))
+                }
+                if (controlnet2Image != null) {
+                    add(at.bromutus.bromine.sdclient.ControlnetParams(
+                        image = controlnet2Image,
+                        type = ControlnetTypeParams(
+                            model = controlnet2Type.params.model,
+                            module = controlnet2Type.params.module,
+                            processorRes = controlnet2Type.params.processorRes,
+                            thresholdA = controlnet2Type.params.thresholdA,
+                            thresholdB = controlnet2Type.params.thresholdB,
+                        ),
+                        weight = controlnet2Weight,
+                    ))
+                }
+            }
 
             val params = Txt2ImgParams(
                 prompt = includeText(this.commandsConfig.alwaysIncludedPrompt, prompt),
@@ -245,11 +384,9 @@ class Txt2ImgCommand(
                 samplerName = samplerName,
                 steps = steps,
                 cfg = cfg,
-                hiresFactor = if (doHiresFix) hiresFactor else null,
-                hiresSteps = hiresSteps,
-                hiresUpscaler = hiresUpscaler,
-                hiresDenoising = hiresDenoising,
+                hires = hires,
                 checkpointId = checkpointId,
+                controlnets = controlnets,
             )
 
             val response = client.txt2img(params)
@@ -270,6 +407,12 @@ class Txt2ImgCommand(
                 otherParams["Hires steps"] = "$hiresSteps"
                 otherParams["Hires denoising"] = "$hiresDenoising"
             }
+            if (controlnet1Image != null) {
+                otherParams["ControlNet 1"] = "${controlnet1Type.name} (Weight: ${controlnet1Weight})"
+            }
+            if (controlnet2Image != null) {
+                otherParams["ControlNet 2"] = "${controlnet2Type.name} (Weight: ${controlnet2Weight})"
+            }
 
             val warnings = mutableListOf<String>()
             if (isHiresFixDesired && !doHiresFix) {
@@ -279,7 +422,7 @@ class Txt2ImgCommand(
                 warnings.add("$desiredSize was reduced to $size due to size constraints.")
             }
 
-            val images = if (response.images.size > 1) {
+            val images = if (count > 1u) {
                 // The first image is a grid containing all the generated images
                 // We can remove it
                 response.images.drop(1)
@@ -311,12 +454,23 @@ class Txt2ImgCommand(
             initialResponse.respondWithException(e)
         }
     }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private suspend fun downloadImageAsBase64(originalImageUrl: String, contentType: String): String {
+        val bytes = HttpClient(CIO)
+            .get(originalImageUrl)
+            .bodyAsChannel()
+            .readRemaining()
+            .readBytes()
+        return "data:$contentType;base64,${Base64.encode(bytes)}"
+    }
 }
 
 private val CommandsConfig.defaultCheckpoint get() = txt2img.defaultCheckpoint ?: global.defaultCheckpoint
 private val CommandsConfig.alwaysIncludedPrompt get() = txt2img.alwaysIncludedPrompt ?: global.alwaysIncludedPrompt
-private val CommandsConfig.alwaysIncludedNegativePrompt get() = txt2img.alwaysIncludedNegativePrompt
-    ?: global.alwaysIncludedNegativePrompt
+private val CommandsConfig.alwaysIncludedNegativePrompt
+    get() = txt2img.alwaysIncludedNegativePrompt
+        ?: global.alwaysIncludedNegativePrompt
 private val CommandsConfig.minWidth get() = txt2img.width?.min ?: global.width.min
 private val CommandsConfig.maxWidth get() = txt2img.width?.max ?: global.width.max
 private val CommandsConfig.defaultWidth get() = txt2img.width?.default ?: global.width.default
