@@ -1,5 +1,6 @@
 package at.bromutus.bromine.sdclient
 
+import at.bromutus.bromine.Controlnet
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -89,7 +90,7 @@ data class Txt2ImgParams(
     val cfg: Double,
     val hires: HiresParams?,
     val checkpointId: String?,
-    val controlnets: List<ControlnetParams> = emptyList(),
+    val controlnets: List<ControlnetUnitParams> = emptyList(),
 )
 
 data class HiresParams(
@@ -99,18 +100,10 @@ data class HiresParams(
     val denoising: Double,
 )
 
-data class ControlnetParams(
+data class ControlnetUnitParams(
     val image: String,
-    val type: ControlnetTypeParams,
+    val type: Controlnet,
     val weight: Double,
-)
-
-data class ControlnetTypeParams(
-    val model: String? = null,
-    val module: String? = null,
-    val processorRes: UInt? = null,
-    val thresholdA: Double? = null,
-    val thresholdB: Double? = null,
 )
 
 data class Img2ImgParams(
@@ -127,7 +120,7 @@ data class Img2ImgParams(
     val steps: UInt,
     val cfg: Double,
     val checkpointId: String?,
-    val controlnets: List<ControlnetParams> = emptyList(),
+    val controlnets: List<ControlnetUnitParams> = emptyList(),
 )
 
 enum class ResizeMode(val intValue: UInt) {
@@ -216,7 +209,7 @@ data class Txt2ImgRequest(
                     putJsonObject("controlnet") {
                         putJsonArray("args") {
                             for (controlnet in params.controlnets) {
-                                val type = controlnet.type
+                                val type = controlnet.type.params
                                 addJsonObject {
                                     put("input_image", controlnet.image)
                                     if (type.module != null) put("module", type.module)
@@ -308,7 +301,7 @@ data class Img2ImgRequest(
                     putJsonObject("controlnet") {
                         putJsonArray("args") {
                             for (controlnet in params.controlnets) {
-                                val type = controlnet.type
+                                val type = controlnet.type.params
                                 addJsonObject {
                                     put("input_image", controlnet.image)
                                     if (type.module != null) put("module", type.module)

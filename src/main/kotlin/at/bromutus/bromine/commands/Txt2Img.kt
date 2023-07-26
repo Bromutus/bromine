@@ -6,10 +6,7 @@ import at.bromutus.bromine.CommandsConfig
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
-import at.bromutus.bromine.sdclient.ControlnetTypeParams
-import at.bromutus.bromine.sdclient.HiresParams
-import at.bromutus.bromine.sdclient.SDClient
-import at.bromutus.bromine.sdclient.Txt2ImgParams
+import at.bromutus.bromine.sdclient.*
 import at.bromutus.bromine.utils.calculateDesiredImageSize
 import at.bromutus.bromine.utils.constrainToPixelSize
 import at.bromutus.bromine.utils.includeText
@@ -347,28 +344,16 @@ class Txt2ImgCommand(
 
             val controlnets = buildList {
                 if (controlnet1Image != null) {
-                    add(at.bromutus.bromine.sdclient.ControlnetParams(
+                    add(ControlnetUnitParams(
                         image = controlnet1Image,
-                        type = ControlnetTypeParams(
-                            model = controlnet1Type.params.model,
-                            module = controlnet1Type.params.module,
-                            processorRes = controlnet1Type.params.processorRes,
-                            thresholdA = controlnet1Type.params.thresholdA,
-                            thresholdB = controlnet1Type.params.thresholdB,
-                        ),
+                        type = controlnet1Type,
                         weight = controlnet1Weight,
                     ))
                 }
                 if (controlnet2Image != null) {
-                    add(at.bromutus.bromine.sdclient.ControlnetParams(
+                    add(ControlnetUnitParams(
                         image = controlnet2Image,
-                        type = ControlnetTypeParams(
-                            model = controlnet2Type.params.model,
-                            module = controlnet2Type.params.module,
-                            processorRes = controlnet2Type.params.processorRes,
-                            thresholdA = controlnet2Type.params.thresholdA,
-                            thresholdB = controlnet2Type.params.thresholdB,
-                        ),
+                        type = controlnet2Type,
                         weight = controlnet2Weight,
                     ))
                 }
@@ -407,12 +392,6 @@ class Txt2ImgCommand(
                 otherParams["Hires steps"] = "$hiresSteps"
                 otherParams["Hires denoising"] = "$hiresDenoising"
             }
-            if (controlnet1Image != null) {
-                otherParams["ControlNet 1"] = "${controlnet1Type.name} (Weight: ${controlnet1Weight})"
-            }
-            if (controlnet2Image != null) {
-                otherParams["ControlNet 2"] = "${controlnet2Type.name} (Weight: ${controlnet2Weight})"
-            }
 
             val warnings = mutableListOf<String>()
             if (isHiresFixDesired && !doHiresFix) {
@@ -429,6 +408,18 @@ class Txt2ImgCommand(
             } else {
                 response.images
             }
+            val outputImages = images.take(count.toInt())
+            val extraImages = images.drop(count.toInt())
+            val controlnetImages = if (controlnets.isNotEmpty()) {
+                if (doHiresFix) {
+                    // Enabling hires fix results in two reference images per ControlNet unit
+                    extraImages.chunked(2) {(_, upscaled) -> upscaled}
+                } else {
+                    extraImages
+                }.zip(controlnets)
+            } else {
+                emptyList()
+            }
 
             initialResponse.edit {
                 embeds?.clear()
@@ -443,10 +434,27 @@ class Txt2ImgCommand(
                     }
                     color = AppColors.success
                 }
-                images.forEachIndexed { index, img ->
+                outputImages.forEachIndexed { index, img ->
                     addFile("${seed + index.toUInt()}.png", ChannelProvider {
                         ByteReadChannel(Base64.decode(img))
                     })
+                }
+                controlnetImages.forEachIndexed { index, (img, net) ->
+                    val fileName = "controlnet${index + 1}.png"
+                    addFile(fileName, ChannelProvider {
+                        ByteReadChannel(Base64.decode(img))
+                    })
+                    embed {
+                        title = "ControlNet Unit ${index + 1}"
+                        description = listOf(
+                            "**Type**: ${net.type.name}",
+                            "**Weight**: ${net.weight}",
+                        ).joinToString("\n")
+                        color = AppColors.success
+                        thumbnail {
+                            url = "attachment://$fileName"
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
