@@ -1,30 +1,23 @@
 package at.bromutus.bromine.commands
 
-import at.bromutus.bromine.AppColors
 import at.bromutus.bromine.appdata.AppConfig
 import at.bromutus.bromine.appdata.CommandsConfig
 import at.bromutus.bromine.appdata.readUserPreferences
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.errors.respondWithException
-import at.bromutus.bromine.sdclient.*
-import at.bromutus.bromine.utils.calculateDesiredImageSize
-import at.bromutus.bromine.utils.constrainToPixelSize
-import at.bromutus.bromine.utils.includeText
-import dev.kord.core.behavior.interaction.respondPublic
+import at.bromutus.bromine.sdclient.ControlnetUnitParams
+import at.bromutus.bromine.sdclient.HiresParams
+import at.bromutus.bromine.sdclient.SDClient
+import at.bromutus.bromine.sdclient.Txt2ImgParams
+import at.bromutus.bromine.utils.*
 import dev.kord.core.behavior.interaction.response.edit
+import dev.kord.core.behavior.interaction.response.respond
 import dev.kord.core.entity.interaction.ChatInputCommandInteraction
 import dev.kord.rest.builder.interaction.*
-import dev.kord.rest.builder.message.create.embed
-import dev.kord.rest.builder.message.modify.embed
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.*
-import io.ktor.client.engine.cio.*
-import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
-import io.ktor.client.statement.*
 import io.ktor.utils.io.*
-import io.ktor.utils.io.core.*
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
@@ -265,13 +258,7 @@ class Txt2ImgCommand(
 
     @OptIn(ExperimentalEncodingApi::class)
     override suspend fun handleInteraction(interaction: ChatInputCommandInteraction) {
-        val initialResponse = interaction.respondPublic {
-            embed {
-                title = "Generating..."
-                description = "Depending on the input parameters, this may take a while..."
-                color = AppColors.processing
-            }
-        }
+        val deferredResponse = interaction.deferPublicResponse()
 
         try {
             val command = interaction.command
@@ -391,104 +378,87 @@ class Txt2ImgCommand(
                 controlnets = controlnets,
             )
 
-            val response = client.txt2img(params)
-
-            val mainParams = mutableMapOf<String, String>()
-            if (prompt != null) mainParams["Prompt"] = prompt
-            if (negativePrompt != null) mainParams["Negative prompt"] = negativePrompt
-            mainParams["Size"] = if (doHiresFix) "$scaledSize (scaled up from $size)" else "$scaledSize"
-            mainParams["Seed"] = "$seed"
-            val checkpoint = checkpoints.find { it.id == checkpointId }
-            if (checkpoint != null) mainParams["Checkpoint"] = checkpoint.name
-
-            val otherParams = mutableMapOf<String, String>()
-            otherParams["Steps"] = "$steps"
-            otherParams["CFG"] = "$cfg"
-            if (doHiresFix) {
-                otherParams["Hires factor"] = "$hiresFactor"
-                otherParams["Hires steps"] = "$hiresSteps"
-                otherParams["Hires denoising"] = "$hiresDenoising"
+            val mainParams = buildMap {
+                if (prompt != null) put("Prompt", prompt)
+                if (negativePrompt != null) put("Negative prompt", negativePrompt)
+                put("Size", if (doHiresFix) "$scaledSize (scaled up from $size)" else "$scaledSize")
+                put("Seed", "$seed")
+                val checkpoint = checkpoints.find { it.id == checkpointId }
+                if (checkpoint != null) put("Checkpoint", checkpoint.name)
             }
 
-            val warnings = mutableListOf<String>()
-            if (isHiresFixDesired && !doHiresFix) {
-                warnings.add("Hires-fix was ignored due to size constraints.")
-            }
-            if (desiredSize.inPixels > size.inPixels) {
-                warnings.add("$desiredSize was reduced to $size due to size constraints.")
-            }
-
-            val images = if (count > 1u) {
-                // The first image is a grid containing all the generated images
-                // We can remove it
-                response.images.drop(1)
-            } else {
-                response.images
-            }
-            val outputImages = images.take(count.toInt())
-            val extraImages = images.drop(count.toInt())
-            var imageIndex = -1
-            val controlnetImages = controlnets.map { net ->
-                if (doHiresFix && net.type.supportsHiresFix) {
-                    ++imageIndex
+            val otherParams = buildMap {
+                put("Steps", "$steps")
+                put("CFG", "$cfg")
+                if (doHiresFix) {
+                    put("Hires factor", "$hiresFactor")
+                    put("Hires steps", "$hiresSteps")
+                    put("Hires denoising", "$hiresDenoising")
                 }
-                net to extraImages.getOrNull(++imageIndex)
             }
 
-            initialResponse.edit {
-                embeds?.clear()
-                embed {
-                    title = "Generation completed."
-                    description = mainParams.map { "**${it.key}**: ${it.value}" }.joinToString("\n")
-                    if (warnings.isNotEmpty()) {
-                        description += "\n\n_Warnings:_\n" + warnings.joinToString("\n") { "- $it" }
+            val warnings = buildList {
+                if (isHiresFixDesired && !doHiresFix) {
+                    add("Hires-fix was ignored due to size constraints.")
+                }
+                if (desiredSize.inPixels > size.inPixels) {
+                    add("$desiredSize was reduced to $size due to size constraints.")
+                }
+            }
+
+            val initialResponse = deferredResponse.respond {
+                generationInProgressEmbed(
+                    mainParams = mainParams,
+                    otherParams = otherParams,
+                    warnings = warnings
+                )
+                controlnetInProgressEmbeds(controlnets.map { net -> net to net.image.split(",").last() })
+            }
+
+            try {
+
+                val response = client.txt2img(params)
+
+                val images = if (count > 1u) {
+                    // The first image is a grid containing all the generated images
+                    // We can remove it
+                    response.images.drop(1)
+                } else {
+                    response.images
+                }
+                val outputImages = images.take(count.toInt())
+                val extraImages = images.drop(count.toInt())
+                var imageIndex = -1
+                val controlnetImages = controlnets.map { net ->
+                    if (doHiresFix && net.type.supportsHiresFix) {
+                        ++imageIndex
                     }
-                    footer {
-                        text = otherParams.map { "${it.key}: ${it.value}" }.joinToString(", ")
-                    }
-                    color = AppColors.success
+                    net to extraImages.getOrNull(++imageIndex)
                 }
-                outputImages.forEachIndexed { index, img ->
-                    addFile("${seed + index.toUInt()}.png", ChannelProvider {
-                        ByteReadChannel(Base64.decode(img))
-                    })
-                }
-                controlnetImages.forEachIndexed { index, (net, img) ->
-                    val fileName = "controlnet${index + 1}.png"
-                    if (img != null) {
-                        addFile(fileName, ChannelProvider {
+
+                initialResponse.edit {
+                    embeds?.clear()
+                    files?.clear()
+                    generationSuccessEmbed(
+                        mainParams = mainParams,
+                        otherParams = otherParams,
+                        warnings = warnings
+                    )
+                    outputImages.forEachIndexed { index, img ->
+                        addFile("${seed + index.toUInt()}.png", ChannelProvider {
                             ByteReadChannel(Base64.decode(img))
                         })
                     }
-                    embed {
-                        title = "ControlNet Unit ${index + 1}"
-                        description = listOf(
-                            "**Type**: ${net.type.name}",
-                            "**Weight**: ${net.weight}",
-                        ).joinToString("\n")
-                        color = AppColors.success
-                        if (img != null) {
-                            thumbnail {
-                                url = "attachment://$fileName"
-                            }
-                        }
-                    }
+                    controlnetSuccessEmbeds(controlnetImages)
                 }
+            } catch (e: Exception) {
+                logger.logInteractionException(e)
+                initialResponse.respondWithException(e)
             }
         } catch (e: Exception) {
             logger.logInteractionException(e)
-            initialResponse.respondWithException(e)
+            deferredResponse.respondWithException(e)
         }
-    }
-
-    @OptIn(ExperimentalEncodingApi::class)
-    private suspend fun downloadImageAsBase64(originalImageUrl: String, contentType: String): String {
-        val bytes = HttpClient(CIO)
-            .get(originalImageUrl)
-            .bodyAsChannel()
-            .readRemaining()
-            .readBytes()
-        return "data:$contentType;base64,${Base64.encode(bytes)}"
     }
 }
 
