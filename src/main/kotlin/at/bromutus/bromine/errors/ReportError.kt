@@ -39,6 +39,7 @@ suspend fun ActionInteractionBehavior.respondWithException(e: Exception): Public
 suspend fun MessageInteractionResponseBehavior.respondWithException(e: Exception): MessageInteractionResponse =
     edit {
         embeds?.clear()
+        files?.clear() // TODO: this doesn't work
         embed {
             buildEmbed(e)
         }
