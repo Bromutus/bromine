@@ -27,7 +27,8 @@ fun loadAppConfig(): AppConfig {
 @Serializable
 data class AppConfig(
     val discord: DiscordConfig,
-    val sd: SDConfig,
+    val sd: SDConfig = SDConfig(),
+    val tg: TGConfig = TGConfig(),
     val commands: CommandsConfig = CommandsConfig(),
     val checkpoints: CheckpointConfig = CheckpointConfig(),
     val controlnet: ControlnetConfig = ControlnetConfig(),
@@ -41,7 +42,12 @@ data class DiscordConfig(
 
 @Serializable
 data class SDConfig(
-    val apiUrl: String,
+    val apiUrl: String? = null,
+)
+
+@Serializable
+data class TGConfig(
+    val apiUrl: String? = null,
 )
 
 @Serializable
@@ -56,12 +62,12 @@ data class GlobalCommandConfig(
     val defaultCheckpoint: String? = null,
     val alwaysIncludedPrompt: String? = null,
     val alwaysIncludedNegativePrompt: String? = null,
-    val width: ValueOptions<UInt> = ValueOptions(1u, 8192u, 512u),
-    val height: ValueOptions<UInt> = ValueOptions(1u, 8192u, 512u),
-    val maxPixels: UInt = 1280u * 1280u,
-    val count: ValueOptions<UInt> = ValueOptions(1u, 9u, 1u),
+    val width: ValueOptions<Int> = ValueOptions(1, 8192, 512),
+    val height: ValueOptions<Int> = ValueOptions(1, 8192, 512),
+    val maxPixels: Int = 1280 * 1280,
+    val count: ValueOptions<Int> = ValueOptions(1, 9, 1),
     val defaultSampler: String = "DPM++ SDE Karras",
-    val steps: ValueOptions<UInt> = ValueOptions(1u, 40u, 20u),
+    val steps: ValueOptions<Int> = ValueOptions(1, 40, 20),
     val cfg: ValueOptions<Double> = ValueOptions(1.0, 30.0, 7.0),
 )
 
@@ -70,15 +76,15 @@ data class Txt2ImgCommandConfig(
     val defaultCheckpoint: String? = null,
     val alwaysIncludedPrompt: String? = null,
     val alwaysIncludedNegativePrompt: String? = null,
-    val width: NullableValueOptions<UInt>? = null,
-    val height: NullableValueOptions<UInt>? = null,
-    val maxPixels: UInt? = null,
-    val count: NullableValueOptions<UInt>? = null,
+    val width: NullableValueOptions<Int>? = null,
+    val height: NullableValueOptions<Int>? = null,
+    val maxPixels: Int? = null,
+    val count: NullableValueOptions<Int>? = null,
     val defaultSampler: String? = null,
-    val steps: NullableValueOptions<UInt>? = null,
+    val steps: NullableValueOptions<Int>? = null,
     val cfg: NullableValueOptions<Double>? = null,
     val hiresFactor: ValueOptions<Double> = ValueOptions(1.0, 20.0, 1.0),
-    val hiresSteps: ValueOptions<UInt> = ValueOptions(0u, 40u, 0u),
+    val hiresSteps: ValueOptions<Int> = ValueOptions(0, 40, 0),
     val hiresUpscaler: String = "Latent",
     val hiresDenoising: ValueOptions<Double> = ValueOptions(0.0, 1.0, 0.65),
 )
@@ -88,14 +94,14 @@ data class Img2ImgCommandConfig(
     val defaultCheckpoint: String? = null,
     val alwaysIncludedPrompt: String? = null,
     val alwaysIncludedNegativePrompt: String? = null,
-    val width: NullableValueOptions<UInt>? = null,
-    val height: NullableValueOptions<UInt>? = null,
-    val maxPixels: UInt? = null,
-    val count: NullableValueOptions<UInt>? = null,
+    val width: NullableValueOptions<Int>? = null,
+    val height: NullableValueOptions<Int>? = null,
+    val maxPixels: Int? = null,
+    val count: NullableValueOptions<Int>? = null,
     val denoisingStrength: ValueOptions<Double> = ValueOptions(0.0, 1.0, 0.6),
-    val defaultResizeMode: UInt = 1u,
+    val defaultResizeMode: Int = 1,
     val defaultSampler: String? = null,
-    val steps: NullableValueOptions<UInt>? = null,
+    val steps: NullableValueOptions<Int>? = null,
     val cfg: NullableValueOptions<Double>? = null,
     val displaySourceImageByDefault: Boolean = true,
 )
@@ -128,7 +134,7 @@ data class Controlnet(
 data class ControlnetParams(
     val model: String? = null,
     val module: String? = null,
-    val processorRes: UInt? = null,
+    val processorRes: Int? = null,
     val thresholdA: Double? = null,
     val thresholdB: Double? = null,
 )

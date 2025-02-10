@@ -81,12 +81,12 @@ class SDClient(val baseUrl: String, private val httpClient: HttpClient) {
 data class Txt2ImgParams(
     val prompt: String?,
     val negativePrompt: String?,
-    val width: UInt,
-    val height: UInt,
-    val count: UInt,
-    val seed: UInt,
+    val width: Int,
+    val height: Int,
+    val count: Int,
+    val seed: Long,
     val samplerName: String,
-    val steps: UInt,
+    val steps: Int,
     val cfg: Double,
     val hires: HiresParams?,
     val checkpointId: String?,
@@ -95,7 +95,7 @@ data class Txt2ImgParams(
 
 data class HiresParams(
     val factor: Double,
-    val steps: UInt,
+    val steps: Int,
     val upscaler: String,
     val denoising: Double,
 )
@@ -110,28 +110,28 @@ data class Img2ImgParams(
     val image: String,
     val prompt: String?,
     val negativePrompt: String?,
-    val width: UInt,
-    val height: UInt,
-    val count: UInt,
+    val width: Int,
+    val height: Int,
+    val count: Int,
     val denoisingStrength: Double,
     val resizeMode: ResizeMode,
-    val seed: UInt,
+    val seed: Long,
     val samplerName: String,
-    val steps: UInt,
+    val steps: Int,
     val cfg: Double,
     val checkpointId: String?,
     val controlnets: List<ControlnetUnitParams> = emptyList(),
 )
 
-enum class ResizeMode(val intValue: UInt) {
-    Stretch(0u),
-    Crop(1u),
-    Fill(2u),
-    Latent(3u),
+enum class ResizeMode(val intValue: Int) {
+    Stretch(0),
+    Crop(1),
+    Fill(2),
+    Latent(3),
     ;
 
     companion object {
-        fun fromUInt(intValue: UInt): ResizeMode? = values().firstOrNull { it.intValue == intValue }
+        fun fromInt(intValue: Int): ResizeMode? = values().firstOrNull { it.intValue == intValue }
     }
 }
 
@@ -139,12 +139,12 @@ enum class ResizeMode(val intValue: UInt) {
 data class Txt2ImgRequest(
     @SerialName("prompt") val prompt: String? = null,
     @SerialName("negative_prompt") val negativePrompt: String? = null,
-    @SerialName("width") val width: UInt? = null,
-    @SerialName("height") val height: UInt? = null,
-    @SerialName("n_iter") val nIter: UInt? = null,
-    @SerialName("seed") val seed: UInt? = null,
+    @SerialName("width") val width: Int? = null,
+    @SerialName("height") val height: Int? = null,
+    @SerialName("n_iter") val nIter: Int? = null,
+    @SerialName("seed") val seed: Long? = null,
     @SerialName("sampler_name") val samplerName: String? = null,
-    @SerialName("steps") val steps: UInt? = null,
+    @SerialName("steps") val steps: Int? = null,
     @SerialName("cfg_scale") val cfgScale: Double? = null,
     @SerialName("enable_hr") val enableHr: Boolean? = null,
     @SerialName("hr_scale") val hrScale: Double? = null,
@@ -234,14 +234,14 @@ data class Img2ImgRequest(
     @SerialName("init_images") val initImages: List<String>? = null,
     @SerialName("prompt") val prompt: String? = null,
     @SerialName("negative_prompt") val negativePrompt: String? = null,
-    @SerialName("width") val width: UInt? = null,
-    @SerialName("height") val height: UInt? = null,
-    @SerialName("n_iter") val nIter: UInt? = null,
+    @SerialName("width") val width: Int? = null,
+    @SerialName("height") val height: Int? = null,
+    @SerialName("n_iter") val nIter: Int? = null,
     @SerialName("denoising_strength") val denoisingStrength: Double? = null,
-    @SerialName("resize_mode") val resizeMode: UInt? = null,
-    @SerialName("seed") val seed: UInt? = null,
+    @SerialName("resize_mode") val resizeMode: Int? = null,
+    @SerialName("seed") val seed: Long? = null,
     @SerialName("sampler_name") val samplerName: String? = null,
-    @SerialName("steps") val steps: UInt? = null,
+    @SerialName("steps") val steps: Int? = null,
     @SerialName("cfg_scale") val cfgScale: Double? = null,
     @SerialName("image_cfg_scale") val imageCfgScale: Int? = null,
     @SerialName("mask") val mask: String? = null,

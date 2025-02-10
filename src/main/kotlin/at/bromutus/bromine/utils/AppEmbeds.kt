@@ -3,8 +3,8 @@ package at.bromutus.bromine.utils
 import at.bromutus.bromine.AppColors
 import at.bromutus.bromine.sdclient.ControlnetUnitParams
 import dev.kord.common.Color
+import dev.kord.rest.builder.message.embed
 import dev.kord.rest.builder.message.modify.MessageModifyBuilder
-import dev.kord.rest.builder.message.modify.embed
 import io.ktor.client.request.forms.*
 import io.ktor.utils.io.*
 import kotlin.io.encoding.Base64
@@ -12,17 +12,22 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 
 
 fun MessageModifyBuilder.generationInProgressEmbed(
+    index: Int? = null,
     mainParams: Map<String, String> = emptyMap(),
     otherParams: Map<String, String> = emptyMap(),
     warnings: List<String> = emptyList(),
     thumbnail: String? = null,
     thumbnailExtension: String? = null,
 ) = generationParamsEmbed(
-    title = "Generating...",
+    title = when (index) {
+        0 -> "Generating..."
+        null -> "Waiting..."
+        else -> "Waiting... (Position: ${index + 1})"
+    },
     mainParams = mainParams,
     otherParams = otherParams,
     warnings = warnings,
-    color = AppColors.processing,
+    color = if (index == 0) AppColors.processing else AppColors.waiting,
     thumbnail = thumbnail,
     thumbnailExtension = thumbnailExtension,
 )
@@ -39,6 +44,22 @@ fun MessageModifyBuilder.generationSuccessEmbed(
     otherParams = otherParams,
     warnings = warnings,
     color = AppColors.success,
+    thumbnail = thumbnail,
+    thumbnailExtension = thumbnailExtension,
+)
+
+fun MessageModifyBuilder.generationFailureEmbed(
+    mainParams: Map<String, String> = emptyMap(),
+    otherParams: Map<String, String> = emptyMap(),
+    warnings: List<String> = emptyList(),
+    thumbnail: String? = null,
+    thumbnailExtension: String? = null,
+) = generationParamsEmbed(
+    title = "Generation failed.",
+    mainParams = mainParams,
+    otherParams = otherParams,
+    warnings = warnings,
+    color = AppColors.error,
     thumbnail = thumbnail,
     thumbnailExtension = thumbnailExtension,
 )
@@ -61,7 +82,7 @@ private fun MessageModifyBuilder.generationParamsEmbed(
     }
     embed {
         this.title = title
-        description = mainParams.map { "**${it.key}**: ${it.value}" }.joinToString("\n")
+        description = mainParams.map { "**${it.key}:** ${it.value}" }.joinToString("\n")
         if (warnings.isNotEmpty()) {
             description += "\n\n_Warnings:_\n" + warnings.joinToString("\n") { "- $it" }
         }
@@ -92,6 +113,15 @@ fun MessageModifyBuilder.controlnetSuccessEmbeds(
     controlnetEmbeds(
         controlnetImages = controlnetImages,
         color = AppColors.success,
+    )
+}
+
+fun MessageModifyBuilder.controlnetFailureEmbeds(
+    controlnetImages: List<Pair<ControlnetUnitParams, String?>> = emptyList(),
+) {
+    controlnetEmbeds(
+        controlnetImages = controlnetImages,
+        color = AppColors.error,
     )
 }
 

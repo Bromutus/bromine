@@ -5,11 +5,11 @@ import at.bromutus.bromine.appdata.CommandsConfig
 import at.bromutus.bromine.appdata.readUserPreferences
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
-import at.bromutus.bromine.errors.respondWithException
 import at.bromutus.bromine.sdclient.ControlnetUnitParams
 import at.bromutus.bromine.sdclient.Img2ImgParams
 import at.bromutus.bromine.sdclient.ResizeMode
 import at.bromutus.bromine.sdclient.SDClient
+import at.bromutus.bromine.tgclient.TGClient
 import at.bromutus.bromine.utils.*
 import dev.kord.core.behavior.interaction.response.edit
 import dev.kord.core.behavior.interaction.response.respond
@@ -21,13 +21,14 @@ import io.ktor.utils.io.*
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
-import kotlin.random.nextUInt
 
 private val logger = KotlinLogging.logger {}
 
 class Img2ImgCommand(
     private val client: SDClient,
     private val config: AppConfig,
+    private val tgClient: TGClient?,
+    private val queueInfo: ExecutionQueueInfo,
 ) : ChatInputCommand {
     override val name = "img2img"
     override val description = "Generate an image from another image"
@@ -141,11 +142,11 @@ class Img2ImgCommand(
                 name = OptionNames.RESIZE_MODE,
                 description = """
                     Resize mode.
-                    Default: ${ResizeMode.fromUInt(commandsConfig.defaultResizeMode)!!.resizeModeText()}.
+                    Default: ${ResizeMode.fromInt(commandsConfig.defaultResizeMode)!!.resizeModeText()}.
                     """.trimIndent().replace("\n", " ")
             ) {
                 required = false
-                ResizeMode.values().forEach {
+                ResizeMode.entries.forEach {
                     choice(name = it.resizeModeText(), value = it.intValue.toLong())
                 }
             }
@@ -294,25 +295,25 @@ class Img2ImgCommand(
                 preferences.negativePromptPrefix,
                 command.strings[OptionNames.NEGATIVE_PROMPT],
             )
-            val width = command.integers[OptionNames.WIDTH]?.toUInt()
+            val width = command.integers[OptionNames.WIDTH]?.toInt()
                 ?: preferences.width
-            val height = command.integers[OptionNames.HEIGHT]?.toUInt()
+            val height = command.integers[OptionNames.HEIGHT]?.toInt()
                 ?: preferences.height
-            val count = command.integers[OptionNames.COUNT]?.toUInt()
+            val count = command.integers[OptionNames.COUNT]?.toInt()
                 ?: preferences.count
                 ?: commandsConfig.defaultCount
             val denoisingStrength = command.numbers[OptionNames.DENOISING_STRENGTH]
                 ?: commandsConfig.defaultDenoisingStrength
             val resizeMode = command.integers[OptionNames.RESIZE_MODE]
-                ?.let { ResizeMode.fromUInt(it.toUInt()) }
-                ?: ResizeMode.fromUInt(commandsConfig.defaultResizeMode)!!
-            val seed = command.integers[OptionNames.SEED]?.toUInt()
-                ?: Random.nextUInt()
+                ?.let { ResizeMode.fromInt(it.toInt()) }
+                ?: ResizeMode.fromInt(commandsConfig.defaultResizeMode)!!
+            val seed = command.integers[OptionNames.SEED]
+                ?: Random.nextLong(0, Long.MAX_VALUE)
             val checkpointId = command.strings[OptionNames.CHECKPOINT]
                 ?: preferences.checkpoint?.takeIf { id -> checkpoints.any { it.id == id } }
                 ?: commandsConfig.defaultCheckpoint
             val samplerName = commandsConfig.defaultSampler
-            val steps = command.integers[OptionNames.STEPS]?.toUInt()
+            val steps = command.integers[OptionNames.STEPS]?.toInt()
                 ?: commandsConfig.defaultSteps
             val cfg = command.numbers[OptionNames.CFG]
                 ?: preferences.cfg
@@ -350,8 +351,8 @@ class Img2ImgCommand(
             val desiredSize = calculateDesiredImageSize(
                 specifiedWidth = width,
                 specifiedHeight = height,
-                originalWidth = attachment.width?.toUInt(),
-                originalHeight = attachment.height?.toUInt(),
+                originalWidth = attachment.width,
+                originalHeight = attachment.height,
                 defaultWidth = commandsConfig.defaultWidth,
                 defaultHeight = commandsConfig.defaultHeight,
             )
@@ -417,57 +418,107 @@ class Img2ImgCommand(
                 }
             }
 
+            val thumbnail = if (displaySource) image.split(",").last() else null
+            val controlnetImages = controlnets.map { net -> net to net.image.split(",").last() }
+
             val initialResponse = deferredResponse.respond {
                 generationInProgressEmbed(
                     mainParams = mainParams,
                     otherParams = otherParams,
                     warnings = warnings,
-                    thumbnail = if (displaySource) image.split(",").last() else null,
+                    thumbnail = thumbnail,
                     thumbnailExtension = imageExtension,
                 )
-                controlnetInProgressEmbeds(controlnets.map { net -> net to net.image.split(",").last() })
+                controlnetInProgressEmbeds(controlnetImages)
             }
 
-            try {
-                val response = client.img2img(params)
+            queueInfo.register(isTextGeneration = false) { index ->
+                try {
+                    if (index != 0) {
+                        initialResponse.edit {
+                            embeds?.clear()
+                            generationInProgressEmbed(
+                                index = index,
+                                mainParams = mainParams,
+                                otherParams = otherParams,
+                                warnings = warnings,
+                            )
+                            controlnetInProgressEmbeds(controlnetImages)
+                        }
+                    } else {
+                        initialResponse.edit {
+                            embeds?.clear()
+                            generationInProgressEmbed(
+                                mainParams = mainParams,
+                                otherParams = otherParams,
+                                warnings = warnings,
+                            )
+                            controlnetInProgressEmbeds(controlnetImages)
+                        }
+                        if (queueInfo.isTextGenerationActive) {
+                            tgClient?.unloadModel()
+                        }
 
-                val images = if (count > 1u) {
-                    // The first image is a grid containing all the generated images
-                    // We can remove it
-                    response.images.drop(1)
-                } else {
-                    response.images
-                }
-                val outputImages = images.take(count.toInt())
-                val extraImages = images.drop(count.toInt())
-                val controlnetImages = controlnets.mapIndexed { index, net ->
-                    net to extraImages.getOrNull(index)
-                }
+                        val response = client.img2img(params)
 
-                initialResponse.edit {
-                    embeds?.clear()
-                    files?.clear()
-                    generationSuccessEmbed(
-                        mainParams = mainParams,
-                        otherParams = otherParams,
-                        warnings = warnings,
-                        thumbnail = if (displaySource) image.split(",").last() else null,
-                        thumbnailExtension = imageExtension,
-                    )
-                    outputImages.forEachIndexed { index, img ->
-                        addFile("${seed + index.toUInt()}.png", ChannelProvider {
-                            ByteReadChannel(Base64.decode(img))
-                        })
+                        val images = if (count > 1) {
+                            // The first image is a grid containing all the generated images
+                            // We can remove it
+                            response.images.drop(1)
+                        } else {
+                            response.images
+                        }
+                        val outputImages = images.take(count)
+                        val extraImages = images.drop(count)
+                        val controlnetImages = controlnets.mapIndexed { index, net ->
+                            net to extraImages.getOrNull(index)
+                        }
+
+                        initialResponse.edit {
+                            embeds?.clear()
+                            files.clear()
+                            generationSuccessEmbed(
+                                mainParams = mainParams,
+                                otherParams = otherParams,
+                                warnings = warnings,
+                                thumbnail = thumbnail,
+                                thumbnailExtension = imageExtension,
+                            )
+                            outputImages.forEachIndexed { index, img ->
+                                addFile("${seed + index}.png", ChannelProvider {
+                                    ByteReadChannel(Base64.decode(img))
+                                })
+                            }
+                            controlnetSuccessEmbeds(controlnetImages)
+                        }
                     }
-                    controlnetSuccessEmbeds(controlnetImages)
+                } catch (e: Exception) {
+                    logger.logInteractionException(e)
+                    initialResponse.edit {
+                        embeds?.clear()
+                        files.clear()
+                        generationFailureEmbed(
+                            mainParams = mainParams,
+                            otherParams = otherParams,
+                            warnings = listOf(e.message ?: "Unknown error") + warnings,
+                            thumbnail = thumbnail,
+                            thumbnailExtension = imageExtension,
+                        )
+                        controlnetFailureEmbeds(controlnetImages)
+                    }
+                } finally {
+                    if (index == 0) {
+                        queueInfo.complete()
+                    }
                 }
-            } catch (e: Exception) {
-                logger.logInteractionException(e)
-                initialResponse.respondWithException(e)
             }
         } catch (e: Exception) {
             logger.logInteractionException(e)
-            deferredResponse.respondWithException(e)
+            deferredResponse.respond {
+                generationFailureEmbed(
+                    warnings = listOf(e.message ?: "Unknown error"),
+                )
+            }
         }
     }
 }

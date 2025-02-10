@@ -11,9 +11,9 @@ import java.nio.file.Path
 data class UserPreferences(
     val checkpoint: String? = null,
     val cfg: Double? = null,
-    val width: UInt? = null,
-    val height: UInt? = null,
-    val count: UInt? = null,
+    val width: Int? = null,
+    val height: Int? = null,
+    val count: Int? = null,
     val promptPrefix: String? = null,
     val negativePromptPrefix: String? = null,
 )

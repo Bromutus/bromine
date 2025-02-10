@@ -11,6 +11,8 @@ import dev.kord.core.behavior.interaction.response.respond
 import dev.kord.core.entity.interaction.ChatInputCommandInteraction
 import dev.kord.core.entity.interaction.SubCommand
 import dev.kord.rest.builder.interaction.*
+import dev.kord.rest.builder.message.EmbedBuilder
+import dev.kord.rest.builder.message.embed
 import dev.kord.rest.builder.message.modify.embed
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -160,11 +162,12 @@ class PreferencesCommand(
                     val preferences = readUserPreferences(user.tag)
                     val checkpoint = command.strings[Options.CHECKPOINT] ?: preferences.checkpoint
                     val cfg = command.numbers[Options.CFG] ?: preferences.cfg
-                    val width = command.integers[Options.WIDTH]?.toUInt() ?: preferences.width
-                    val height = command.integers[Options.HEIGHT]?.toUInt() ?: preferences.height
-                    val count = command.integers[Options.COUNT]?.toUInt() ?: preferences.count
+                    val width = command.integers[Options.WIDTH]?.toInt() ?: preferences.width
+                    val height = command.integers[Options.HEIGHT]?.toInt() ?: preferences.height
+                    val count = command.integers[Options.COUNT]?.toInt() ?: preferences.count
                     val promptPrefix = command.strings[Options.PROMPT_PREFIX] ?: preferences.promptPrefix
-                    val negativePromptPrefix = command.strings[Options.NEGATIVE_PROMPT_PREFIX] ?: preferences.negativePromptPrefix
+                    val negativePromptPrefix =
+                        command.strings[Options.NEGATIVE_PROMPT_PREFIX] ?: preferences.negativePromptPrefix
                     writeUserPreferences(
                         user.tag,
                         UserPreferences(

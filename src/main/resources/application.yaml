@@ -4,6 +4,9 @@ discord:
 sd:
   apiUrl: "http://localhost:7860"
 
+tg:
+  apiUrl: "http://localhost:5000"
+
 commands:
 
   global:

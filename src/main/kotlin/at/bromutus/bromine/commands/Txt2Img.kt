@@ -3,16 +3,18 @@ package at.bromutus.bromine.commands
 import at.bromutus.bromine.appdata.AppConfig
 import at.bromutus.bromine.appdata.CommandsConfig
 import at.bromutus.bromine.appdata.readUserPreferences
+import at.bromutus.bromine.commands.Txt2ImgCommand.OptionNames
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
-import at.bromutus.bromine.errors.respondWithException
 import at.bromutus.bromine.sdclient.ControlnetUnitParams
 import at.bromutus.bromine.sdclient.HiresParams
 import at.bromutus.bromine.sdclient.SDClient
 import at.bromutus.bromine.sdclient.Txt2ImgParams
+import at.bromutus.bromine.tgclient.TGClient
 import at.bromutus.bromine.utils.*
 import dev.kord.core.behavior.interaction.response.edit
 import dev.kord.core.behavior.interaction.response.respond
+import dev.kord.core.entity.User
 import dev.kord.core.entity.interaction.ChatInputCommandInteraction
 import dev.kord.rest.builder.interaction.*
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -20,14 +22,16 @@ import io.ktor.client.request.forms.*
 import io.ktor.utils.io.*
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.math.absoluteValue
 import kotlin.random.Random
-import kotlin.random.nextUInt
 
 private val logger = KotlinLogging.logger {}
 
 class Txt2ImgCommand(
     private val client: SDClient,
     private val config: AppConfig,
+    private val tgClient: TGClient?,
+    private val queueInfo: ExecutionQueueInfo,
 ) : ChatInputCommand {
     override val name = "txt2img"
     override val description = "Generate an image from text"
@@ -262,172 +266,300 @@ class Txt2ImgCommand(
 
         try {
             val command = interaction.command
-            val preferences by lazy { readUserPreferences(interaction.user.tag) }
 
-            val prompt = includeText(
-                preferences.promptPrefix,
-                command.strings[OptionNames.PROMPT],
-            )
-            val negativePrompt = includeText(
-                preferences.negativePromptPrefix,
-                command.strings[OptionNames.NEGATIVE_PROMPT],
-            )
-            val width = command.integers[OptionNames.WIDTH]?.toUInt()
-                ?: preferences.width
-            val height = command.integers[OptionNames.HEIGHT]?.toUInt()
-                ?: preferences.height
-            val count = command.integers[OptionNames.COUNT]?.toUInt()
-                ?: preferences.count
-                ?: commandsConfig.defaultCount
-            val seed = command.integers[OptionNames.SEED]?.toUInt()
-                ?: Random.nextUInt()
-            val checkpointId = command.strings[OptionNames.CHECKPOINT]
-                ?: preferences.checkpoint?.takeIf { id -> checkpoints.any { it.id == id } }
-                ?: commandsConfig.defaultCheckpoint
-            val samplerName = commandsConfig.defaultSampler
-            val steps = command.integers[OptionNames.STEPS]?.toUInt()
-                ?: commandsConfig.defaultSteps
-            val cfg = command.numbers[OptionNames.CFG]
-                ?: preferences.cfg
-                ?: commandsConfig.defaultCfg
-            val hiresFactor = command.numbers[OptionNames.HIRES_FACTOR]
-                ?: commandsConfig.defaultHiresFactor
-            val hiresUpscaler = commandsConfig.hiresUpscaler
-            val hiresSteps = command.integers[OptionNames.HIRES_STEPS]?.toUInt()
-                ?: commandsConfig.defaultHiresSteps
-            val hiresDenoising = command.numbers[OptionNames.HIRES_DENOISING]
-                ?: commandsConfig.defaultHiresDenoising
-
-            val controlnet1Attachment = command.attachments[OptionNames.CONTROLNET1_IMAGE]
-            val controlnet1Image = controlnet1Attachment?.let {
+            val pControlnet1Attachment = command.attachments[OptionNames.CONTROLNET1_IMAGE]
+            val pControlnet1Image = pControlnet1Attachment?.let {
                 if (!it.isImage || it.contentType == null) {
                     throw CommandException("ControlNet 1 image must be an image")
                 }
                 downloadImageAsBase64(it.url, it.contentType!!)
             }
-            val controlnet1Type = command.strings[OptionNames.CONTROLNET1_TYPE]
-                ?.let { type -> controlnetTypes.find { it.name == type } }
-                ?: controlnetTypes.first()
-            val controlnet1Weight = command.numbers[OptionNames.CONTROLNET1_WEIGHT]
-                ?: config.controlnet.weight.default
-
-            val controlnet2Attachment = command.attachments[OptionNames.CONTROLNET2_IMAGE]
-            val controlnet2Image = controlnet2Attachment?.let {
+            val pControlnet2Attachment = command.attachments[OptionNames.CONTROLNET2_IMAGE]
+            val pControlnet2Image = pControlnet2Attachment?.let {
                 if (!it.isImage || it.contentType == null) {
                     throw CommandException("ControlNet 2 image must be an image")
                 }
                 downloadImageAsBase64(it.url, it.contentType!!)
             }
-            val controlnet2Type = command.strings[OptionNames.CONTROLNET2_TYPE]
-                ?.let { type -> controlnetTypes.find { it.name == type } }
-                ?: controlnetTypes.first()
-            val controlnet2Weight = command.numbers[OptionNames.CONTROLNET2_WEIGHT]
-                ?: config.controlnet.weight.default
 
-            val desiredSize = calculateDesiredImageSize(
-                specifiedWidth = width,
-                specifiedHeight = height,
-                defaultWidth = commandsConfig.defaultWidth,
-                defaultHeight = commandsConfig.defaultHeight,
-            )
-            val size = desiredSize.constrainToPixelSize(this.commandsConfig.maxPixels)
-
-            val isHiresFixDesired = hiresFactor > 1.0
-            val scaledSize = size * hiresFactor
-            val doHiresFix = isHiresFixDesired && scaledSize.inPixels <= this.commandsConfig.maxPixels
-            val hires = if (doHiresFix) HiresParams(
-                factor = hiresFactor,
-                steps = hiresSteps,
-                upscaler = hiresUpscaler,
-                denoising = hiresDenoising,
-            ) else null
-
-            val controlnets = buildList {
-                if (controlnet1Image != null) {
-                    add(
-                        ControlnetUnitParams(
-                            image = controlnet1Image,
-                            type = controlnet1Type,
-                            weight = controlnet1Weight,
+            generate(
+                user = interaction.user,
+                pPrompt = command.strings[OptionNames.PROMPT],
+                pNegativePrompt = command.strings[OptionNames.NEGATIVE_PROMPT],
+                pWidth = command.integers[OptionNames.WIDTH]?.toInt(),
+                pHeight = command.integers[OptionNames.HEIGHT]?.toInt(),
+                pCount = command.integers[OptionNames.COUNT]?.toInt(),
+                pSeed = command.integers[OptionNames.SEED],
+                pCheckpoint = command.strings[OptionNames.CHECKPOINT],
+                pSteps = command.integers[OptionNames.STEPS]?.toInt(),
+                pCfg = command.numbers[OptionNames.CFG],
+                pHiresFactor = command.numbers[OptionNames.HIRES_FACTOR],
+                pHiresSteps = command.integers[OptionNames.HIRES_STEPS]?.toInt(),
+                pHiresDenoising = command.numbers[OptionNames.HIRES_DENOISING],
+                pControlnet1Type = command.strings[OptionNames.CONTROLNET1_TYPE],
+                pControlnet1Image = pControlnet1Image,
+                pControlnet1Weight = command.numbers[OptionNames.CONTROLNET1_WEIGHT],
+                pControlnet2Type = command.strings[OptionNames.CONTROLNET2_TYPE],
+                pControlnet2Image = pControlnet2Image,
+                pControlnet2Weight = command.numbers[OptionNames.CONTROLNET2_WEIGHT],
+                setInitialMessage = { mainParams, otherParams, warnings, controlnetImages ->
+                    deferredResponse.respond {
+                        generationInProgressEmbed(
+                            mainParams = mainParams,
+                            otherParams = otherParams,
+                            warnings = warnings,
                         )
-                    )
-                }
-                if (controlnet2Image != null) {
-                    add(
-                        ControlnetUnitParams(
-                            image = controlnet2Image,
-                            type = controlnet2Type,
-                            weight = controlnet2Weight,
+                        controlnetInProgressEmbeds(controlnetImages)
+                    }
+                },
+                onProgress = { index, mainParams, otherParams, warnings, controlnetImages ->
+                    edit {
+                        embeds?.clear()
+                        generationInProgressEmbed(
+                            index = if (index != 0) index else null,
+                            mainParams = mainParams,
+                            otherParams = otherParams,
+                            warnings = warnings,
                         )
-                    )
-                }
-            }
-
-            val params = Txt2ImgParams(
-                prompt = includeText(this.commandsConfig.alwaysIncludedPrompt, prompt),
-                negativePrompt = includeText(this.commandsConfig.alwaysIncludedNegativePrompt, negativePrompt),
-                width = size.width,
-                height = size.height,
-                count = count,
-                seed = seed,
-                samplerName = samplerName,
-                steps = steps,
-                cfg = cfg,
-                hires = hires,
-                checkpointId = checkpointId,
-                controlnets = controlnets,
+                        controlnetInProgressEmbeds(controlnetImages)
+                    }
+                },
+                onSuccess = { outputImages, seed, mainParams, otherParams, warnings, controlnetImages ->
+                    edit {
+                        embeds?.clear()
+                        files.clear()
+                        generationSuccessEmbed(
+                            mainParams = mainParams,
+                            otherParams = otherParams,
+                            warnings = warnings
+                        )
+                        outputImages.forEachIndexed { index, img ->
+                            addFile("${seed + index}.png", ChannelProvider {
+                                ByteReadChannel(Base64.decode(img))
+                            })
+                        }
+                        controlnetSuccessEmbeds(controlnetImages)
+                    }
+                },
+                onError = { e, mainParams, otherParams, warnings, controlnetImages ->
+                    edit {
+                        embeds?.clear()
+                        files.clear()
+                        generationFailureEmbed(
+                            mainParams = mainParams,
+                            otherParams = otherParams,
+                            warnings = listOf(e.message ?: "Unknown error") + warnings,
+                        )
+                        controlnetFailureEmbeds(controlnetImages)
+                    }
+                },
             )
-
-            val mainParams = buildMap {
-                if (prompt != null) put("Prompt", prompt)
-                if (negativePrompt != null) put("Negative prompt", negativePrompt)
-                put("Size", if (doHiresFix) "$scaledSize (scaled up from $size)" else "$size")
-                put("Seed", "$seed")
-                val checkpoint = checkpoints.find { it.id == checkpointId }
-                if (checkpoint != null) put("Checkpoint", checkpoint.name)
-            }
-
-            val otherParams = buildMap {
-                put("Steps", "$steps")
-                put("CFG", "$cfg")
-                if (doHiresFix) {
-                    put("Hires factor", "$hiresFactor")
-                    put("Hires steps", "$hiresSteps")
-                    put("Hires denoising", "$hiresDenoising")
-                }
-            }
-
-            val warnings = buildList {
-                if (isHiresFixDesired && !doHiresFix) {
-                    add("Hires-fix was ignored due to size constraints.")
-                }
-                if (desiredSize.inPixels > size.inPixels) {
-                    add("$desiredSize was reduced to $size due to size constraints.")
-                }
-            }
-
-            val initialResponse = deferredResponse.respond {
-                generationInProgressEmbed(
-                    mainParams = mainParams,
-                    otherParams = otherParams,
-                    warnings = warnings
+        } catch (e: Exception) {
+            logger.logInteractionException(e)
+            deferredResponse.respond {
+                generationFailureEmbed(
+                    warnings = listOf(e.message ?: "Unknown error")
                 )
-                controlnetInProgressEmbeds(controlnets.map { net -> net to net.image.split(",").last() })
             }
+        }
+    }
 
+    suspend fun <M : Any> generate(
+        user: User,
+        setInitialMessage: suspend (
+            mainParams: Map<String, String>,
+            otherParams: Map<String, String>,
+            warnings: List<String>,
+            controlnetImages: List<Pair<ControlnetUnitParams, String>>,
+        ) -> M,
+        onProgress: suspend M.(
+            index: Int?,
+            mainParams: Map<String, String>,
+            otherParams: Map<String, String>,
+            warnings: List<String>,
+            controlnetImages: List<Pair<ControlnetUnitParams, String>>,
+        ) -> Unit,
+        onSuccess: suspend M.(
+            outputImages: List<String>,
+            seed: Long,
+            mainParams: Map<String, String>,
+            otherParams: Map<String, String>,
+            warnings: List<String>,
+            controlnetImages: List<Pair<ControlnetUnitParams, String?>>,
+        ) -> Unit,
+        onError: suspend M.(
+            e: Exception,
+                mainParams: Map<String, String>,
+                otherParams: Map<String, String>,
+                warnings: List<String>,
+                controlnetImages: List<Pair<ControlnetUnitParams, String>>,
+                ) -> Unit,
+        pPrompt: String? = null,
+        pNegativePrompt: String? = null,
+        pWidth: Int? = null,
+        pHeight: Int? = null,
+        pCount: Int? = null,
+        pSeed: Long? = null,
+        pCheckpoint: String? = null,
+        pSteps: Int? = null,
+        pCfg: Double? = null,
+        pHiresFactor: Double? = null,
+        pHiresSteps: Int? = null,
+        pHiresDenoising: Double? = null,
+        pControlnet1Image: String? = null,
+        pControlnet1Type: String? = null,
+        pControlnet1Weight: Double? = null,
+        pControlnet2Image: String? = null,
+        pControlnet2Type: String? = null,
+        pControlnet2Weight: Double? = null,
+    ) {
+        val preferences by lazy { readUserPreferences(user.tag) }
+
+        val prompt = includeText(preferences.promptPrefix, pPrompt)
+        val negativePrompt = includeText(preferences.negativePromptPrefix, pNegativePrompt)
+        val width = pWidth
+            ?: preferences.width
+        val height = pHeight
+            ?: preferences.height
+        val count = pCount
+            ?: preferences.count
+            ?: commandsConfig.defaultCount
+        val seed = pSeed?.absoluteValue
+            ?: Random.nextLong(0, Long.MAX_VALUE)
+        val checkpointId = pCheckpoint
+            ?: preferences.checkpoint?.takeIf { id -> checkpoints.any { it.id == id } }
+            ?: commandsConfig.defaultCheckpoint
+        val samplerName = commandsConfig.defaultSampler
+        val steps = pSteps
+            ?: commandsConfig.defaultSteps
+        val cfg = pCfg
+            ?: preferences.cfg
+            ?: commandsConfig.defaultCfg
+        val hiresFactor = pHiresFactor
+            ?: commandsConfig.defaultHiresFactor
+        val hiresUpscaler = commandsConfig.hiresUpscaler
+        val hiresSteps = pHiresSteps
+            ?: commandsConfig.defaultHiresSteps
+        val hiresDenoising = pHiresDenoising
+            ?: commandsConfig.defaultHiresDenoising
+        val controlnet1Type = pControlnet1Type
+            ?.let { type -> controlnetTypes.find { it.name == type } }
+            ?: controlnetTypes.first()
+        val controlnet1Weight = pControlnet1Weight
+            ?: config.controlnet.weight.default
+        val controlnet2Type = pControlnet2Type
+            ?.let { type -> controlnetTypes.find { it.name == type } }
+            ?: controlnetTypes.first()
+        val controlnet2Weight = pControlnet2Weight
+            ?: config.controlnet.weight.default
+
+        val desiredSize = calculateDesiredImageSize(
+            specifiedWidth = width,
+            specifiedHeight = height,
+            defaultWidth = commandsConfig.defaultWidth,
+            defaultHeight = commandsConfig.defaultHeight,
+        )
+        val size = desiredSize.constrainToPixelSize(this.commandsConfig.maxPixels)
+
+        val isHiresFixDesired = hiresFactor > 1.0
+        val scaledSize = size * hiresFactor
+        val doHiresFix = isHiresFixDesired && scaledSize.inPixels <= this.commandsConfig.maxPixels
+        val hires = if (doHiresFix) HiresParams(
+            factor = hiresFactor,
+            steps = hiresSteps,
+            upscaler = hiresUpscaler,
+            denoising = hiresDenoising,
+        ) else null
+
+        val controlnets = buildList {
+            if (pControlnet1Image != null) {
+                add(
+                    ControlnetUnitParams(
+                        image = pControlnet1Image,
+                        type = controlnet1Type,
+                        weight = controlnet1Weight,
+                    )
+                )
+            }
+            if (pControlnet2Image != null) {
+                add(
+                    ControlnetUnitParams(
+                        image = pControlnet2Image,
+                        type = controlnet2Type,
+                        weight = controlnet2Weight,
+                    )
+                )
+            }
+        }
+
+        val params = Txt2ImgParams(
+            prompt = includeText(this.commandsConfig.alwaysIncludedPrompt, prompt),
+            negativePrompt = includeText(this.commandsConfig.alwaysIncludedNegativePrompt, negativePrompt),
+            width = size.width,
+            height = size.height,
+            count = count,
+            seed = seed,
+            samplerName = samplerName,
+            steps = steps,
+            cfg = cfg,
+            hires = hires,
+            checkpointId = checkpointId,
+            controlnets = controlnets,
+        )
+
+        val mainParams = buildMap {
+            if (prompt != null) put("Prompt", prompt)
+            if (negativePrompt != null) put("Negative prompt", negativePrompt)
+            put("Size", if (doHiresFix) "$scaledSize (scaled up from $size)" else "$size")
+            put("Seed", "$seed")
+            val checkpoint = checkpoints.find { it.id == checkpointId }
+            if (checkpoint != null) put("Checkpoint", checkpoint.name)
+        }
+
+        val otherParams = buildMap {
+            put("Steps", "$steps")
+            put("CFG", "$cfg")
+            if (doHiresFix) {
+                put("Hires factor", "$hiresFactor")
+                put("Hires steps", "$hiresSteps")
+                put("Hires denoising", "$hiresDenoising")
+            }
+        }
+
+        val warnings = buildList {
+            if (isHiresFixDesired && !doHiresFix) {
+                add("Hires-fix was ignored due to size constraints.")
+            }
+            if (desiredSize.inPixels > size.inPixels) {
+                add("$desiredSize was reduced to $size due to size constraints.")
+            }
+        }
+
+        val controlnetImages = controlnets.map { net -> net to net.image.split(",").last() }
+
+        val initialResponse = setInitialMessage(mainParams, otherParams, warnings, controlnetImages)
+
+        queueInfo.register(isTextGeneration = false) { index ->
             try {
+                initialResponse.onProgress(index, mainParams, otherParams, warnings, controlnetImages)
+                if (index != 0) {
+                    return@register
+                }
 
+                if (queueInfo.isTextGenerationActive) {
+                    tgClient?.unloadModel()
+                }
                 val response = client.txt2img(params)
 
-                val images = if (count > 1u) {
+                val images = if (count > 1) {
                     // The first image is a grid containing all the generated images
                     // We can remove it
                     response.images.drop(1)
                 } else {
                     response.images
                 }
-                val outputImages = images.take(count.toInt())
-                val extraImages = images.drop(count.toInt())
+                val outputImages = images.take(count)
+                val extraImages = images.drop(count)
                 var imageIndex = -1
                 val controlnetImages = controlnets.map { net ->
                     if (doHiresFix && net.type.supportsHiresFix) {
@@ -436,28 +568,22 @@ class Txt2ImgCommand(
                     net to extraImages.getOrNull(++imageIndex)
                 }
 
-                initialResponse.edit {
-                    embeds?.clear()
-                    files?.clear()
-                    generationSuccessEmbed(
-                        mainParams = mainParams,
-                        otherParams = otherParams,
-                        warnings = warnings
-                    )
-                    outputImages.forEachIndexed { index, img ->
-                        addFile("${seed + index.toUInt()}.png", ChannelProvider {
-                            ByteReadChannel(Base64.decode(img))
-                        })
-                    }
-                    controlnetSuccessEmbeds(controlnetImages)
-                }
+                initialResponse.onSuccess(outputImages, params.seed, mainParams, otherParams, warnings, controlnetImages)
+
             } catch (e: Exception) {
                 logger.logInteractionException(e)
-                initialResponse.respondWithException(e)
+                initialResponse.onError(
+                    e,
+                    mainParams,
+                    otherParams,
+                    warnings,
+                    controlnetImages
+                )
+            } finally {
+                if (index == 0) {
+                    queueInfo.complete()
+                }
             }
-        } catch (e: Exception) {
-            logger.logInteractionException(e)
-            deferredResponse.respondWithException(e)
         }
     }
 }
