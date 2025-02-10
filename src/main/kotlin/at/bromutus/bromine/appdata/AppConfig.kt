@@ -62,13 +62,14 @@ data class GlobalCommandConfig(
     val defaultCheckpoint: String? = null,
     val alwaysIncludedPrompt: String? = null,
     val alwaysIncludedNegativePrompt: String? = null,
-    val width: ValueOptions<Int> = ValueOptions(1, 8192, 512),
-    val height: ValueOptions<Int> = ValueOptions(1, 8192, 512),
-    val maxPixels: Int = 1280 * 1280,
+    val width: ValueOptions<Int> = ValueOptions(1, 8192, 1024),
+    val height: ValueOptions<Int> = ValueOptions(1, 8192, 1024),
+    val maxPixels: Int = 2048 * 2048,
     val count: ValueOptions<Int> = ValueOptions(1, 9, 1),
-    val defaultSampler: String = "DPM++ SDE Karras",
-    val steps: ValueOptions<Int> = ValueOptions(1, 40, 20),
-    val cfg: ValueOptions<Double> = ValueOptions(1.0, 30.0, 7.0),
+    val defaultSampler: String = "Euler a",
+    val steps: ValueOptions<Int> = ValueOptions(1, 40, 25),
+    val cfg: ValueOptions<Double> = ValueOptions(1.0, 30.0, 6.0),
+    val defaultEnableADetailer: Boolean = false,
 )
 
 @Serializable
@@ -83,6 +84,7 @@ data class Txt2ImgCommandConfig(
     val defaultSampler: String? = null,
     val steps: NullableValueOptions<Int>? = null,
     val cfg: NullableValueOptions<Double>? = null,
+    val defaultEnableADetailer: Boolean? = null,
     val hiresFactor: ValueOptions<Double> = ValueOptions(1.0, 20.0, 1.0),
     val hiresSteps: ValueOptions<Int> = ValueOptions(0, 40, 0),
     val hiresUpscaler: String = "Latent",
@@ -103,6 +105,7 @@ data class Img2ImgCommandConfig(
     val defaultSampler: String? = null,
     val steps: NullableValueOptions<Int>? = null,
     val cfg: NullableValueOptions<Double>? = null,
+    val defaultEnableADetailer: Boolean? = null,
     val displaySourceImageByDefault: Boolean = true,
 )
 

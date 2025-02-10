@@ -10,7 +10,9 @@ import java.nio.file.Path
 @Serializable
 data class UserPreferences(
     val checkpoint: String? = null,
+    val steps: Int? = null,
     val cfg: Double? = null,
+    val enableADetailer: Boolean? = null,
     val width: Int? = null,
     val height: Int? = null,
     val count: Int? = null,

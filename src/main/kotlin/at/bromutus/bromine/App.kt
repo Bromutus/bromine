@@ -45,7 +45,7 @@ suspend fun main() {
         }
         add(LoraCommand(config.lora, nsfw = false))
         add(LoraCommand(config.lora, nsfw = true))
-        PreferencesCommand(config)
+        add(PreferencesCommand(config))
     }
 
     kord.createCommands(commands)
@@ -58,7 +58,7 @@ suspend fun main() {
     }
 
     kord.login {
-        logger.info("Login successful")
+        logger.info { "Login successful" }
     }
 }
 
@@ -92,7 +92,7 @@ private suspend fun Kord.createCommands(commands: List<ChatInputCommand>) {
 private fun Kord.registerInteractionHandlers(commands: List<ChatInputCommand>) {
     on<ChatInputCommandInteractionCreateEvent> {
         val commandName = interaction.invokedCommandName
-        logger.debug("New interaction: $commandName")
+        logger.debug { "New interaction: $commandName" }
         try {
             commands.find { it.name == commandName }?.handleInteraction(interaction)
                 ?: throw CommandException("Unable to handle command: $commandName. Maybe this command was deleted?")

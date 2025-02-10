@@ -3,7 +3,6 @@ package at.bromutus.bromine.commands
 import at.bromutus.bromine.appdata.AppConfig
 import at.bromutus.bromine.appdata.CommandsConfig
 import at.bromutus.bromine.appdata.readUserPreferences
-import at.bromutus.bromine.commands.Txt2ImgCommand.OptionNames
 import at.bromutus.bromine.errors.CommandException
 import at.bromutus.bromine.errors.logInteractionException
 import at.bromutus.bromine.sdclient.ControlnetUnitParams
@@ -50,6 +49,7 @@ class Txt2ImgCommand(
         const val CHECKPOINT = "checkpoint"
         const val STEPS = "steps"
         const val CFG = "cfg"
+        const val ENABLE_ADETAILER = "enable-adetailer"
         const val HIRES_FACTOR = "hires-factor"
         const val HIRES_STEPS = "hires-steps"
         const val HIRES_DENOISING = "hires-denoising"
@@ -159,6 +159,13 @@ class Txt2ImgCommand(
                 minValue = commandsConfig.minCfg
                 maxValue = commandsConfig.maxCfg
             }
+            boolean(
+                name = OptionNames.ENABLE_ADETAILER,
+                description = """
+                    Enable ADetailer. Adds more details to hands and faces.
+                    Default: ${commandsConfig.defaultEnableADetailer}.
+                    """.trimIndent().replace("\n", " ")
+            )
             number(
                 name = OptionNames.HIRES_FACTOR,
                 description = """
@@ -403,6 +410,7 @@ class Txt2ImgCommand(
         pCheckpoint: String? = null,
         pSteps: Int? = null,
         pCfg: Double? = null,
+        pEnableADetailer: Boolean? = null,
         pHiresFactor: Double? = null,
         pHiresSteps: Int? = null,
         pHiresDenoising: Double? = null,
@@ -431,10 +439,14 @@ class Txt2ImgCommand(
             ?: commandsConfig.defaultCheckpoint
         val samplerName = commandsConfig.defaultSampler
         val steps = pSteps
+            ?: preferences.steps
             ?: commandsConfig.defaultSteps
         val cfg = pCfg
             ?: preferences.cfg
             ?: commandsConfig.defaultCfg
+        val enableADetailer = pEnableADetailer
+            ?: preferences.enableADetailer
+            ?: commandsConfig.defaultEnableADetailer
         val hiresFactor = pHiresFactor
             ?: commandsConfig.defaultHiresFactor
         val hiresUpscaler = commandsConfig.hiresUpscaler
@@ -502,6 +514,7 @@ class Txt2ImgCommand(
             samplerName = samplerName,
             steps = steps,
             cfg = cfg,
+            enableADetailer = enableADetailer,
             hires = hires,
             checkpointId = checkpointId,
             controlnets = controlnets,
@@ -519,6 +532,7 @@ class Txt2ImgCommand(
         val otherParams = buildMap {
             put("Steps", "$steps")
             put("CFG", "$cfg")
+            put("ADetailer", if (enableADetailer) "enabled" else "disabled")
             if (doHiresFix) {
                 put("Hires factor", "$hiresFactor")
                 put("Hires steps", "$hiresSteps")
@@ -610,6 +624,7 @@ private val CommandsConfig.defaultSteps get() = txt2img.steps?.default ?: global
 private val CommandsConfig.minCfg get() = txt2img.cfg?.min ?: global.cfg.min
 private val CommandsConfig.maxCfg get() = txt2img.cfg?.max ?: global.cfg.max
 private val CommandsConfig.defaultCfg get() = txt2img.cfg?.default ?: global.cfg.default
+private val CommandsConfig.defaultEnableADetailer get() = txt2img.defaultEnableADetailer ?: global.defaultEnableADetailer
 private val CommandsConfig.minHiresFactor get() = txt2img.hiresFactor.min
 private val CommandsConfig.maxHiresFactor get() = txt2img.hiresFactor.max
 private val CommandsConfig.defaultHiresFactor get() = txt2img.hiresFactor.default

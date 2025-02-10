@@ -27,7 +27,7 @@ fun createTGClient(baseUrl: String): TGClient {
         }
         install(Logging) {
             logger = object : Logger {
-                override fun log(message: String) = at.bromutus.bromine.tgclient.logger.debug(message)
+                override fun log(message: String) = at.bromutus.bromine.tgclient.logger.debug { message }
             }
             level = LogLevel.HEADERS
         }
@@ -38,7 +38,7 @@ fun createTGClient(baseUrl: String): TGClient {
 class TGClient(val baseUrl: String, private val httpClient: HttpClient) {
     suspend fun loadModel(modelName: String) {
         val request = ModelLoadRequest(modelName)
-        logger.trace("Request: $request")
+        logger.trace { "Request: $request" }
 
         val response = try {
             httpClient.post("$baseUrl/v1/internal/model/load") {
@@ -48,7 +48,7 @@ class TGClient(val baseUrl: String, private val httpClient: HttpClient) {
         } catch (e: Exception) {
             throw TGClientException(cause = e)
         }
-        logger.trace("Response: $response")
+        logger.trace { "Response: $response" }
     }
 
     suspend fun unloadModel() {
@@ -57,14 +57,14 @@ class TGClient(val baseUrl: String, private val httpClient: HttpClient) {
         } catch (e: Exception) {
             throw TGClientException(cause = e)
         }
-        logger.trace("Response: $response")
+        logger.trace { "Response: $response" }
     }
 
     suspend fun generateChat(params: ChatCompletionParams): ChatCompletionResponse {
         val request = ChatCompletionRequest.create(params)
-        logger.info("\nSYSTEM\n${params.messages.firstOrNull { it.role == "system" }?.content}")
-        logger.info("\nUSER\n${params.messages.lastOrNull { it.role == "user" }?.content}")
-        logger.trace("Request: $request")
+        logger.info { "\nSYSTEM\n${params.messages.firstOrNull { it.role == "system" }?.content}" }
+        logger.info { "\nUSER\n${params.messages.lastOrNull { it.role == "user" }?.content}" }
+        logger.trace { "Request: $request" }
 
         val response = try {
             httpClient.post("$baseUrl/v1/chat/completions") {
@@ -74,8 +74,8 @@ class TGClient(val baseUrl: String, private val httpClient: HttpClient) {
         } catch (e: Exception) {
             throw TGClientException(cause = e)
         }
-        logger.trace("Response: $response")
-        logger.info("\nASSISTANT\n${response.choices?.firstOrNull()?.message?.content}")
+        logger.trace { "Response: $response" }
+        logger.info { "\nASSISTANT\n${response.choices?.firstOrNull()?.message?.content}" }
 
         return response
     }

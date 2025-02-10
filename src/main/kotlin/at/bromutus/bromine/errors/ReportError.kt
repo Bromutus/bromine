@@ -2,17 +2,12 @@ package at.bromutus.bromine.errors
 
 import at.bromutus.bromine.AppColors
 import at.bromutus.bromine.sdclient.SDClientException
-import dev.kord.core.behavior.MessageBehavior
-import dev.kord.core.behavior.edit
 import dev.kord.core.behavior.interaction.ActionInteractionBehavior
 import dev.kord.core.behavior.interaction.respondPublic
 import dev.kord.core.behavior.interaction.response.*
-import dev.kord.core.entity.Message
 import dev.kord.core.entity.interaction.response.MessageInteractionResponse
 import dev.kord.rest.builder.message.EmbedBuilder
-import dev.kord.rest.builder.message.create.embed
 import dev.kord.rest.builder.message.embed
-import dev.kord.rest.builder.message.modify.embed
 import io.github.oshai.kotlinlogging.KLogger
 
 class CommandException(message: String? = null, cause: Throwable? = null) : RuntimeException(message, cause)
@@ -20,15 +15,17 @@ class CommandException(message: String? = null, cause: Throwable? = null) : Runt
 fun KLogger.logInteractionException(e: Exception) {
     when (e) {
         is CommandException -> {
-            debug("Command Exception: ${e.message}")
+            debug { "Command Exception: ${e.message}" }
         }
+
         is SDClientException -> {
-            info("Error: ${e.message}")
-            info("Details: ${e.details}")
-            info("Errors: ${e.errors}")
+            info { "Error: ${e.message}" }
+            info { "Details: ${e.details}" }
+            info { "Errors: ${e.errors}" }
         }
+
         else -> {
-            error("Unknown error.", e)
+            error(e) { "Unknown error." }
         }
     }
 }

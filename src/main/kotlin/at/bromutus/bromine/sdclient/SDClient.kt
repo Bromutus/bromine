@@ -28,7 +28,7 @@ fun createSDClient(baseUrl: String): SDClient {
         }
         install(Logging) {
             logger = object : Logger {
-                override fun log(message: String) = at.bromutus.bromine.sdclient.logger.debug(message)
+                override fun log(message: String) = at.bromutus.bromine.sdclient.logger.debug { message }
             }
             level = LogLevel.HEADERS
         }
@@ -39,7 +39,7 @@ fun createSDClient(baseUrl: String): SDClient {
 class SDClient(val baseUrl: String, private val httpClient: HttpClient) {
     suspend fun txt2img(params: Txt2ImgParams): ImgResponse {
         val request = Txt2ImgRequest.create(params)
-        logger.trace("Request: $request")
+        logger.trace { "Request: $request" }
 
         val response = try {
             httpClient.post("$baseUrl/sdapi/v1/txt2img") {
@@ -49,7 +49,7 @@ class SDClient(val baseUrl: String, private val httpClient: HttpClient) {
         } catch (e: Exception) {
             throw SDClientException(cause = e)
         }
-        logger.trace("Response: $response")
+        logger.trace { "Response: $response" }
 
         if (response.error != null) {
             throw SDClientException(message = response.error, details = response.detail, errors = response.errors)
@@ -59,7 +59,7 @@ class SDClient(val baseUrl: String, private val httpClient: HttpClient) {
 
     suspend fun img2img(params: Img2ImgParams): ImgResponse {
         val request = Img2ImgRequest.create(params)
-        logger.trace("Request: $request")
+        logger.trace { "Request: $request" }
 
         val response = try {
             httpClient.post("$baseUrl/sdapi/v1/img2img") {
@@ -69,7 +69,7 @@ class SDClient(val baseUrl: String, private val httpClient: HttpClient) {
         } catch (e: Exception) {
             throw SDClientException(cause = e)
         }
-        logger.trace("Response: $response")
+        logger.trace { "Response: $response" }
 
         if (response.error != null) {
             throw SDClientException(message = response.error, details = response.detail, errors = response.errors)
@@ -88,6 +88,7 @@ data class Txt2ImgParams(
     val samplerName: String,
     val steps: Int,
     val cfg: Double,
+    val enableADetailer: Boolean,
     val hires: HiresParams?,
     val checkpointId: String?,
     val controlnets: List<ControlnetUnitParams> = emptyList(),
@@ -119,6 +120,7 @@ data class Img2ImgParams(
     val samplerName: String,
     val steps: Int,
     val cfg: Double,
+    val enableADetailer: Boolean,
     val checkpointId: String?,
     val controlnets: List<ControlnetUnitParams> = emptyList(),
 )
@@ -131,7 +133,7 @@ enum class ResizeMode(val intValue: Int) {
     ;
 
     companion object {
-        fun fromInt(intValue: Int): ResizeMode? = values().firstOrNull { it.intValue == intValue }
+        fun fromInt(intValue: Int): ResizeMode? = entries.firstOrNull { it.intValue == intValue }
     }
 }
 
@@ -196,7 +198,7 @@ data class Txt2ImgRequest(
             cfgScale = params.cfg,
             enableHr = params.hires != null,
             hrScale = params.hires?.factor,
-            hrSecondPassSteps = params.hires?.steps?.toInt(),
+            hrSecondPassSteps = params.hires?.steps,
             hrUpscaler = params.hires?.upscaler,
             denoisingStrength = params.hires?.denoising,
             overrideSettings = buildJsonObject {
@@ -219,6 +221,19 @@ data class Txt2ImgRequest(
                                     if (type.thresholdA != null) put("threshold_a", type.thresholdA)
                                     if (type.thresholdB != null) put("threshold_b", type.thresholdB)
                                 }
+                            }
+                        }
+                    }
+                }
+                if (params.enableADetailer) {
+                    putJsonObject("ADetailer") {
+                        putJsonArray("args") {
+                            addJsonObject {
+                                put("ad_model", "hand_yolov8n.pt")
+                                put("ad_prompt", "hand")
+                            }
+                            addJsonObject {
+                                put("ad_model", "face_yolov8n.pt")
                             }
                         }
                     }
@@ -310,6 +325,19 @@ data class Img2ImgRequest(
                                     if (type.processorRes != null) put("processor_res", type.processorRes.toInt())
                                     if (type.thresholdA != null) put("threshold_a", type.thresholdA)
                                     if (type.thresholdB != null) put("threshold_b", type.thresholdB)
+                                }
+                            }
+                        }
+                    }
+                    if (params.enableADetailer) {
+                        putJsonObject("ADetailer") {
+                            putJsonArray("args") {
+                                addJsonObject {
+                                    put("ad_model", "hand_yolov8n.pt")
+                                    put("ad_prompt", "hand")
+                                }
+                                addJsonObject {
+                                    put("ad_model", "face_yolov8n.pt")
                                 }
                             }
                         }

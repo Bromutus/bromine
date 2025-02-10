@@ -11,9 +11,7 @@ import dev.kord.core.behavior.interaction.response.respond
 import dev.kord.core.entity.interaction.ChatInputCommandInteraction
 import dev.kord.core.entity.interaction.SubCommand
 import dev.kord.rest.builder.interaction.*
-import dev.kord.rest.builder.message.EmbedBuilder
 import dev.kord.rest.builder.message.embed
-import dev.kord.rest.builder.message.modify.embed
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -37,15 +35,19 @@ class PreferencesCommand(
 
     private object Options {
         const val CHECKPOINT = "checkpoint"
-        const val CHECKPOINT_DESCRIPTION = "The default stable diffusion checkpoint"
+        const val CHECKPOINT_DESCRIPTION = "Default stable diffusion checkpoint"
+        const val STEPS = "steps"
+        const val STEPS_DESCRIPTION = "Default number of steps"
         const val CFG = "cfg"
-        const val CFG_DESCRIPTION = "The default CFG-scale value"
+        const val CFG_DESCRIPTION = "Default CFG-scale value"
+        const val ENABLE_ADETAILER = "enable-adetailer"
+        const val ENABLE_ADETAILER_DESCRIPTION = "Enable ADetailer by default"
         const val WIDTH = "width"
-        const val WIDTH_DESCRIPTION = "The default width of generated images"
+        const val WIDTH_DESCRIPTION = "Default width of generated images"
         const val HEIGHT = "height"
-        const val HEIGHT_DESCRIPTION = "The default height of generated images"
+        const val HEIGHT_DESCRIPTION = "Default height of generated images"
         const val COUNT = "count"
-        const val COUNT_DESCRIPTION = "The default number of generated images"
+        const val COUNT_DESCRIPTION = "Default number of generated images"
         const val PROMPT_PREFIX = "prompt-prefix"
         const val PROMPT_DESCRIPTION = "Text to always add to the prompt"
         const val NEGATIVE_PROMPT_PREFIX = "negative-prompt-prefix"
@@ -64,10 +66,18 @@ class PreferencesCommand(
                         }
                     }
                 }
+                integer(name = Options.STEPS, description = Options.STEPS_DESCRIPTION) {
+                    required = false
+                    minValue = config.commands.global.steps.min.toLong()
+                    maxValue = config.commands.global.steps.max.toLong()
+                }
                 number(name = Options.CFG, description = Options.CFG_DESCRIPTION) {
                     required = false
                     minValue = config.commands.global.cfg.min
                     maxValue = config.commands.global.cfg.max
+                }
+                boolean(name = Options.ENABLE_ADETAILER, description = Options.ENABLE_ADETAILER_DESCRIPTION) {
+                    required = false
                 }
                 integer(name = Options.WIDTH, description = Options.WIDTH_DESCRIPTION) {
                     required = false
@@ -95,7 +105,13 @@ class PreferencesCommand(
                 boolean(name = Options.CHECKPOINT, description = Options.CHECKPOINT_DESCRIPTION) {
                     required = false
                 }
+                boolean(name = Options.STEPS, description = Options.STEPS_DESCRIPTION) {
+                    required = false
+                }
                 boolean(name = Options.CFG, description = Options.CFG_DESCRIPTION) {
+                    required = false
+                }
+                boolean(name = Options.ENABLE_ADETAILER, description = Options.ENABLE_ADETAILER_DESCRIPTION) {
                     required = false
                 }
                 boolean(name = Options.WIDTH, description = Options.WIDTH_DESCRIPTION) {
@@ -132,7 +148,9 @@ class PreferencesCommand(
                     val preferenceEntries = buildMap {
                         val checkpoint = preferences.checkpoint?.let { id -> checkpoints.find { id == it.id } }
                         if (checkpoint != null) put(Options.CHECKPOINT, checkpoint.name)
+                        if (preferences.steps != null) put(Options.STEPS, "${preferences.steps}")
                         if (preferences.cfg != null) put(Options.CFG, "${preferences.cfg}")
+                        if (preferences.enableADetailer != null) put(Options.ENABLE_ADETAILER, preferences.enableADetailer)
                         if (preferences.width != null) put(Options.WIDTH, "${preferences.width}px")
                         if (preferences.height != null) put(Options.HEIGHT, "${preferences.height}px")
                         if (preferences.count != null) put(Options.COUNT, "${preferences.count}")
@@ -161,7 +179,9 @@ class PreferencesCommand(
                     val user = interaction.user
                     val preferences = readUserPreferences(user.tag)
                     val checkpoint = command.strings[Options.CHECKPOINT] ?: preferences.checkpoint
+                    val steps = command.integers[Options.STEPS]?.toInt() ?: preferences.steps
                     val cfg = command.numbers[Options.CFG] ?: preferences.cfg
+                    val enableADetailer = command.booleans[Options.ENABLE_ADETAILER] ?: preferences.enableADetailer
                     val width = command.integers[Options.WIDTH]?.toInt() ?: preferences.width
                     val height = command.integers[Options.HEIGHT]?.toInt() ?: preferences.height
                     val count = command.integers[Options.COUNT]?.toInt() ?: preferences.count
@@ -172,7 +192,9 @@ class PreferencesCommand(
                         user.tag,
                         UserPreferences(
                             checkpoint = checkpoint,
+                            steps = steps,
                             cfg = cfg,
+                            enableADetailer = enableADetailer,
                             width = width,
                             height = height,
                             count = count,
@@ -193,7 +215,9 @@ class PreferencesCommand(
                     val user = interaction.user
                     val preferences = readUserPreferences(user.tag)
                     val checkpoint = command.booleans[Options.CHECKPOINT] ?: false
+                    val steps = command.booleans[Options.STEPS] ?: false
                     val cfg = command.booleans[Options.CFG] ?: false
+                    val enableADetailer = command.booleans[Options.ENABLE_ADETAILER] ?: false
                     val width = command.booleans[Options.WIDTH] ?: false
                     val height = command.booleans[Options.HEIGHT] ?: false
                     val count = command.booleans[Options.COUNT] ?: false
@@ -203,7 +227,9 @@ class PreferencesCommand(
                         user.tag,
                         UserPreferences(
                             checkpoint = if (checkpoint) null else preferences.checkpoint,
+                            steps = if (steps) null else preferences.steps,
                             cfg = if (cfg) null else preferences.cfg,
+                            enableADetailer = if (enableADetailer) null else preferences.enableADetailer,
                             width = if (width) null else preferences.width,
                             height = if (height) null else preferences.height,
                             count = if (count) null else preferences.count,

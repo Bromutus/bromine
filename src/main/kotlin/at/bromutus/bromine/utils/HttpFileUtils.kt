@@ -4,7 +4,8 @@ import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
-import io.ktor.utils.io.core.*
+import io.ktor.utils.io.*
+import kotlinx.io.readByteArray
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -15,6 +16,6 @@ suspend fun downloadImageAsBase64(originalImageUrl: String, contentType: String)
         .get(originalImageUrl)
         .bodyAsChannel()
         .readRemaining()
-        .readBytes()
+        .readByteArray()
     return "data:$contentType;base64,${Base64.encode(bytes)}"
 }

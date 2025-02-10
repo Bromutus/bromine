@@ -113,11 +113,11 @@ fun autosaveExample(
 ) {
     try {
         if (action == null || response == null) {
-            logger.warn("No action or response to autosave")
+            logger.warn { "No action or response to autosave" }
             return
         }
         if ((action == ActionChoice.GenerateImage || action == ActionChoice.UpdateImage) && imageGenerationParams == null) {
-            logger.warn("No image generation params to autosave")
+            logger.warn { "No image generation params to autosave" }
             return
         }
         val resolvedResponse = formatter.resolveIdentifiers(response)
@@ -133,7 +133,7 @@ fun autosaveExample(
             }
         }
         if (truncatedMessages.isEmpty()) {
-            logger.warn("No messages to autosave")
+            logger.warn { "No messages to autosave" }
             return
         }
         saveExample(
@@ -141,6 +141,6 @@ fun autosaveExample(
             LocalDateTime.now(),
         )
     } catch (e: Exception) {
-        logger.warn("Failed to autosave example", e)
+        logger.warn(e) { "Failed to autosave example" }
     }
 }

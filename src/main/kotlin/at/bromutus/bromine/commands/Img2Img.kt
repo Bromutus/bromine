@@ -50,6 +50,7 @@ class Img2ImgCommand(
         const val CHECKPOINT = "checkpoint"
         const val STEPS = "steps"
         const val CFG = "cfg"
+        const val ENABLE_ADETAILER = "enable-adetailer"
         const val CONTROLNET1_IMAGE = "controlnet1-image"
         const val CONTROLNET1_TYPE = "controlnet1-type"
         const val CONTROLNET1_WEIGHT = "controlnet1-weight"
@@ -195,6 +196,13 @@ class Img2ImgCommand(
                 minValue = commandsConfig.minCfg
                 maxValue = commandsConfig.maxCfg
             }
+            boolean(
+                name = OptionNames.ENABLE_ADETAILER,
+                description = """
+                    Enable ADetailer. Adds more details to hands and faces.
+                    Default: ${commandsConfig.defaultEnableADetailer}.
+                    """.trimIndent().replace("\n", " ")
+            )
             if (controlnetTypes.isNotEmpty()) {
                 attachment(
                     name = OptionNames.CONTROLNET1_IMAGE,
@@ -314,10 +322,14 @@ class Img2ImgCommand(
                 ?: commandsConfig.defaultCheckpoint
             val samplerName = commandsConfig.defaultSampler
             val steps = command.integers[OptionNames.STEPS]?.toInt()
+                ?: preferences.steps
                 ?: commandsConfig.defaultSteps
             val cfg = command.numbers[OptionNames.CFG]
                 ?: preferences.cfg
                 ?: commandsConfig.defaultCfg
+            val enableADetailer = command.booleans[OptionNames.ENABLE_ADETAILER]
+                ?: preferences.enableADetailer
+                ?: commandsConfig.defaultEnableADetailer
 
             val controlnet1Attachment = command.attachments[OptionNames.CONTROLNET1_IMAGE]
             val controlnet1Image = controlnet1Attachment?.let {
@@ -392,6 +404,7 @@ class Img2ImgCommand(
                 samplerName = samplerName,
                 steps = steps,
                 cfg = cfg,
+                enableADetailer = enableADetailer,
                 checkpointId = checkpointId,
                 controlnets = controlnets,
             )
@@ -549,5 +562,6 @@ private val CommandsConfig.defaultSteps get() = img2img.steps?.default ?: global
 private val CommandsConfig.minCfg get() = img2img.cfg?.min ?: global.cfg.min
 private val CommandsConfig.maxCfg get() = img2img.cfg?.max ?: global.cfg.max
 private val CommandsConfig.defaultCfg get() = img2img.cfg?.default ?: global.cfg.default
+private val CommandsConfig.defaultEnableADetailer get() = img2img.defaultEnableADetailer ?: global.defaultEnableADetailer
 private val CommandsConfig.displaySourceImageByDefault get() = img2img.displaySourceImageByDefault
 

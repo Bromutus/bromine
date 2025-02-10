@@ -272,7 +272,9 @@ class ChatCompletionHook(
                         null
                     } else {
                         val size = params["Size"]?.split(" ")?.firstOrNull()
-                        val checkpoint = params["Checkpoint"]?.let { name -> config.checkpoints.installed.firstOrNull { it.name == name }?.simpleName() }
+                        val checkpoint = params["Checkpoint"]?.let { name ->
+                            config.checkpoints.installed.firstOrNull { it.name == name }?.simpleName()
+                        }
                         val imageGenerationParams = ImageGenerationParams(
                             prompt = params["Prompt"],
                             negativePrompt = params["Negative prompt"],
@@ -327,7 +329,7 @@ class ChatCompletionHook(
                         TextProcessingResult(responseMessage, imageGenerationParams)
                     }
                 } catch (e: Exception) {
-                    logger.error("Failed to react to message", e)
+                    logger.error(e) { "Failed to react to message" }
                     null
                 } finally {
                     queueInfo.complete()
@@ -342,7 +344,7 @@ class ChatCompletionHook(
                 }
             }
         } catch (e: Exception) {
-            logger.error("Failed to react to message", e)
+            logger.error(e) { "Failed to react to message" }
         }
     }
 
@@ -379,7 +381,7 @@ class ChatCompletionHook(
         val match = choiceRegex.find(actionChoiceResponse.choices!!.first().message!!.content)
         ActionChoice.fromFormatted(match!!.value)
     } catch (e: Exception) {
-        logger.error("Failed to check action", e)
+        logger.error(e) { "Failed to check action" }
         null
     }
 
@@ -428,7 +430,7 @@ class ChatCompletionHook(
             )
             response.choices?.first()?.message?.content?.removePrefix("$botIdentifier:")?.trim()
         } catch (e: Exception) {
-            logger.error("Failed to generate response", e)
+            logger.error(e) { "Failed to generate response" }
             null
         }
     }
@@ -529,7 +531,7 @@ class ChatCompletionHook(
                 seed = seed,
             )
         } catch (e: Exception) {
-            logger.error("Failed to get image generation params", e)
+            logger.error(e) { "Failed to get image generation params" }
             return null
         }
     }
@@ -607,7 +609,7 @@ class ChatCompletionHook(
                 },
             )
         } catch (e: Exception) {
-            logger.error("Failed to generate image", e)
+            logger.error(e) { "Failed to generate image" }
             message.edit {
                 embeds?.clear()
                 files.clear()
