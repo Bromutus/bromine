@@ -3,7 +3,7 @@ COPY --chown=gradle:gradle . /home/gradle/src
 WORKDIR /home/gradle/src
 RUN gradle shadowJar --no-daemon
 
-FROM eclipse-temurin:17-alpine
+FROM eclipse-temurin:23-alpine
 
 RUN mkdir /app
 

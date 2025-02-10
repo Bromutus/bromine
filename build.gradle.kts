@@ -1,12 +1,14 @@
-val kotlin_version: String by project
-val kotlin_logging_version: String by project
-val log4j_version: String by project
-val ktor_version: String by project
-val kord_version: String by project
+val kotlinVersion: String by project
+val kotlinLoggingVersion: String by project
+val log4jVersion: String by project
+val ktorVersion: String by project
+val kordVersion: String by project
+val scrimageVersion: String by project
+val kamlVersion: String by project
 
 plugins {
-    kotlin("jvm") version "1.9.22"
-    kotlin("plugin.serialization") version "1.9.22"
+    kotlin("jvm") version "2.0.21"
+    kotlin("plugin.serialization") version "2.0.21"
     id("com.github.johnrengelman.shadow") version "7.1.2"
     application
 }
@@ -19,22 +21,23 @@ application {
 
 repositories {
     mavenCentral()
+    maven("https://jitpack.io")
 }
 
 dependencies {
-    implementation("io.github.oshai:kotlin-logging-jvm:$kotlin_logging_version")
-    implementation("org.apache.logging.log4j:log4j-core:$log4j_version")
-    implementation("org.apache.logging.log4j:log4j-api:$log4j_version")
-    implementation("org.apache.logging.log4j:log4j-slf4j2-impl:$log4j_version")
-    implementation("dev.kord:kord-core:$kord_version")
-    implementation("io.ktor:ktor-client-core:$ktor_version")
-    implementation("io.ktor:ktor-client-cio:$ktor_version")
-    implementation("io.ktor:ktor-client-content-negotiation:$ktor_version")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:$ktor_version")
-    implementation("io.ktor:ktor-client-logging-jvm:2.2.4")
-    implementation("com.sksamuel.scrimage:scrimage-core:4.0.37")
-    implementation("com.charleskorn.kaml:kaml:0.54.0")
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
+    implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion")
+    implementation("org.apache.logging.log4j:log4j-core:$log4jVersion")
+    implementation("org.apache.logging.log4j:log4j-api:$log4jVersion")
+    implementation("org.apache.logging.log4j:log4j-slf4j2-impl:$log4jVersion")
+    implementation("dev.kord:kord-core:$kordVersion")
+    implementation("io.ktor:ktor-client-core:$ktorVersion")
+    implementation("io.ktor:ktor-client-cio:$ktorVersion")
+    implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
+    implementation("io.ktor:ktor-client-logging-jvm:$ktorVersion")
+    implementation("com.sksamuel.scrimage:scrimage-core:$scrimageVersion")
+    implementation("com.charleskorn.kaml:kaml:$kamlVersion")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlinVersion")
 }
 
 tasks {
