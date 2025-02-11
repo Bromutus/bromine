@@ -155,9 +155,9 @@ class PreferencesCommand(
                         if (preferences.height != null) put(Options.HEIGHT, "${preferences.height}px")
                         if (preferences.count != null) put(Options.COUNT, "${preferences.count}")
                         if (preferences.promptPrefix != null)
-                            put(Options.PROMPT_PREFIX, "\"${preferences.promptPrefix}\"")
+                            put(Options.PROMPT_PREFIX, "`${preferences.promptPrefix}`")
                         if (preferences.negativePromptPrefix != null)
-                            put(Options.NEGATIVE_PROMPT_PREFIX, "\"${preferences.negativePromptPrefix}\"")
+                            put(Options.NEGATIVE_PROMPT_PREFIX, "`${preferences.negativePromptPrefix}`")
                     }
 
                     initialResponse.respond {

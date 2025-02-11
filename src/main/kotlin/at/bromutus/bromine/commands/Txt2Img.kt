@@ -521,8 +521,8 @@ class Txt2ImgCommand(
         )
 
         val mainParams = buildMap {
-            if (prompt != null) put("Prompt", prompt)
-            if (negativePrompt != null) put("Negative prompt", negativePrompt)
+            if (prompt != null) put("Prompt", "`$prompt`")
+            if (negativePrompt != null) put("Negative prompt", "`$negativePrompt`")
             put("Size", if (doHiresFix) "$scaledSize (scaled up from $size)" else "$size")
             put("Seed", "$seed")
             val checkpoint = checkpoints.find { it.id == checkpointId }
