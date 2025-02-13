@@ -315,8 +315,8 @@ class Img2ImgCommand(
             val resizeMode = command.integers[OptionNames.RESIZE_MODE]
                 ?.let { ResizeMode.fromInt(it.toInt()) }
                 ?: ResizeMode.fromInt(commandsConfig.defaultResizeMode)!!
-            val seed = command.integers[OptionNames.SEED]
-                ?: Random.nextLong(0, Long.MAX_VALUE)
+            val seed = command.integers[OptionNames.SEED]?.toInt()
+                ?: Random.nextInt(0, Int.MAX_VALUE)
             val checkpointId = command.strings[OptionNames.CHECKPOINT]
                 ?: preferences.checkpoint?.takeIf { id -> checkpoints.any { it.id == id } }
                 ?: commandsConfig.defaultCheckpoint
@@ -368,7 +368,7 @@ class Img2ImgCommand(
                 defaultWidth = commandsConfig.defaultWidth,
                 defaultHeight = commandsConfig.defaultHeight,
             )
-            val size = desiredSize.constrainToPixelSize(commandsConfig.maxPixels)
+            val size = commandsConfig.maxPixels?.let { desiredSize.constrainToPixelSize(it) } ?: desiredSize
 
             val controlnets = buildList {
                 if (controlnet1Image != null) {

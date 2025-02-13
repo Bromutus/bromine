@@ -296,7 +296,7 @@ class Txt2ImgCommand(
                 pWidth = command.integers[OptionNames.WIDTH]?.toInt(),
                 pHeight = command.integers[OptionNames.HEIGHT]?.toInt(),
                 pCount = command.integers[OptionNames.COUNT]?.toInt(),
-                pSeed = command.integers[OptionNames.SEED],
+                pSeed = command.integers[OptionNames.SEED]?.toInt(),
                 pCheckpoint = command.strings[OptionNames.CHECKPOINT],
                 pSteps = command.integers[OptionNames.STEPS]?.toInt(),
                 pCfg = command.numbers[OptionNames.CFG],
@@ -388,7 +388,7 @@ class Txt2ImgCommand(
         ) -> Unit,
         onSuccess: suspend M.(
             outputImages: List<String>,
-            seed: Long,
+            seed: Int,
             mainParams: Map<String, String>,
             otherParams: Map<String, String>,
             warnings: List<String>,
@@ -406,7 +406,7 @@ class Txt2ImgCommand(
         pWidth: Int? = null,
         pHeight: Int? = null,
         pCount: Int? = null,
-        pSeed: Long? = null,
+        pSeed: Int? = null,
         pCheckpoint: String? = null,
         pSteps: Int? = null,
         pCfg: Double? = null,
@@ -433,7 +433,7 @@ class Txt2ImgCommand(
             ?: preferences.count
             ?: commandsConfig.defaultCount
         val seed = pSeed?.absoluteValue
-            ?: Random.nextLong(0, Long.MAX_VALUE)
+            ?: Random.nextInt(0, Int.MAX_VALUE)
         val checkpointId = pCheckpoint
             ?: preferences.checkpoint?.takeIf { id -> checkpoints.any { it.id == id } }
             ?: commandsConfig.defaultCheckpoint
@@ -471,11 +471,11 @@ class Txt2ImgCommand(
             defaultWidth = commandsConfig.defaultWidth,
             defaultHeight = commandsConfig.defaultHeight,
         )
-        val size = desiredSize.constrainToPixelSize(this.commandsConfig.maxPixels)
+        val size = this.commandsConfig.maxPixels?.let { desiredSize.constrainToPixelSize(it) } ?: desiredSize
 
         val isHiresFixDesired = hiresFactor > 1.0
         val scaledSize = size * hiresFactor
-        val doHiresFix = isHiresFixDesired && scaledSize.inPixels <= this.commandsConfig.maxPixels
+        val doHiresFix = isHiresFixDesired && (this.commandsConfig.maxPixels?.let { scaledSize.inPixels <= it } ?: true)
         val hires = if (doHiresFix) HiresParams(
             factor = hiresFactor,
             steps = hiresSteps,

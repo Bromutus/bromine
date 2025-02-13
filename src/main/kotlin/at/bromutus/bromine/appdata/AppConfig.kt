@@ -64,7 +64,7 @@ data class GlobalCommandConfig(
     val alwaysIncludedNegativePrompt: String? = null,
     val width: ValueOptions<Int> = ValueOptions(1, 8192, 1024),
     val height: ValueOptions<Int> = ValueOptions(1, 8192, 1024),
-    val maxPixels: Int = 2048 * 2048,
+    val maxPixels: Int? = null,
     val count: ValueOptions<Int> = ValueOptions(1, 9, 1),
     val defaultSampler: String = "Euler a",
     val steps: ValueOptions<Int> = ValueOptions(1, 40, 25),

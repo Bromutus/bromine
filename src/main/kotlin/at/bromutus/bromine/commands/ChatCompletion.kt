@@ -281,7 +281,7 @@ class ChatCompletionHook(
                             width = size?.split("x")?.firstOrNull()?.toIntOrNull(),
                             height = size?.split("x")?.lastOrNull()?.toIntOrNull(),
                             checkpoint = checkpoint,
-                            seed = params["Seed"]?.toLongOrNull(),
+                            seed = params["Seed"]?.toIntOrNull(),
                         )
                         ImageGenerationMessage(status, imageGenerationParams)
                     }
@@ -521,7 +521,7 @@ class ChatCompletionHook(
                 config.checkpoints.installed.forSimpleName(it)?.simpleName()
                     ?: config.checkpoints.installed.forStyle(it)?.style()
             }
-            val seed = paramMap["seed"]?.toLongOrNull()?.absoluteValue
+            val seed = paramMap["seed"]?.toIntOrNull()?.absoluteValue
             return ImageGenerationParams(
                 prompt = prompt,
                 negativePrompt = negativePrompt,
@@ -700,7 +700,7 @@ data class ImageGenerationParams(
     @SerialName("width") val width: Int? = null,
     @SerialName("height") val height: Int? = null,
     @SerialName("checkpoint") val checkpoint: String? = null,
-    @SerialName("seed") val seed: Long? = null,
+    @SerialName("seed") val seed: Int? = null,
 )
 
 fun ImageGenerationParams.format(): String {
