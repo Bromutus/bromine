@@ -320,7 +320,6 @@ class Txt2ImgCommand(
                     }
                 },
                 onProgress = { index, mainParams, otherParams, warnings, controlnetImages ->
-                    logger.info { "Editing message -> $index ($mainParams)" }
                     edit {
                         embeds?.clear()
                         generationInProgressEmbed(
