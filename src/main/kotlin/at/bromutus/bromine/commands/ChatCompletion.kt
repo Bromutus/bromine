@@ -91,7 +91,14 @@ class MentionFormatter(
             }
     }
 
-    private fun selectByIdentifier(type: String?, id: Long?, name: String?, whenUser: User.() -> String?, whenChannel: Channel.() -> String?, whenRole: Role.() -> String?): String {
+    private fun selectByIdentifier(
+        type: String?,
+        id: Long?,
+        name: String?,
+        whenUser: User.() -> String?,
+        whenChannel: Channel.() -> String?,
+        whenRole: Role.() -> String?
+    ): String {
         return when (type) {
             "user" -> {
                 id?.let { usersById[it]?.whenUser() }
@@ -138,12 +145,15 @@ class MentionFormatter(
                     "@", "@!" -> {
                         id?.let { usersById[it] }?.let { userIdentifiers[it] }
                     }
+
                     "#" -> {
                         id?.let { channelsById[it] }?.let { channelIdentifiers[it] }
                     }
+
                     "@&" -> {
                         id?.let { rolesById[it] }?.let { roleIdentifiers[it] }
                     }
+
                     else -> null
                 }
                 if (identifier != null) {
@@ -153,12 +163,15 @@ class MentionFormatter(
                         "@", "@!" -> {
                             "user" to "User"
                         }
+
                         "#" -> {
                             "channel" to "Channel"
                         }
+
                         "@&" -> {
                             "role" to "Role"
                         }
+
                         else -> {
                             null to null
                         }
@@ -289,11 +302,7 @@ class ChatCompletionHook(
                 listOfNotNull(messageContent, generationInfo)
             }
 
-            queueInfo.register(isTextGeneration = true) { index ->
-                if (index != 0) {
-                    return@register
-                }
-
+            queueInfo.register(isTextGeneration = true, onIndexChanged = {}) {
                 val result = try {
                     event.message.channel.withTyping {
                         if (!queueInfo.isTextGenerationActive) {

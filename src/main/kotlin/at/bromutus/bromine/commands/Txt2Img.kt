@@ -320,10 +320,11 @@ class Txt2ImgCommand(
                     }
                 },
                 onProgress = { index, mainParams, otherParams, warnings, controlnetImages ->
+                    logger.info { "Editing message -> $index ($mainParams)" }
                     edit {
                         embeds?.clear()
                         generationInProgressEmbed(
-                            index = if (index != 0) index else null,
+                            index = index,
                             mainParams = mainParams,
                             otherParams = otherParams,
                             warnings = warnings,
@@ -380,7 +381,7 @@ class Txt2ImgCommand(
             controlnetImages: List<Pair<ControlnetUnitParams, String>>,
         ) -> M,
         onProgress: suspend M.(
-            index: Int?,
+            index: Int,
             mainParams: Map<String, String>,
             otherParams: Map<String, String>,
             warnings: List<String>,
@@ -396,11 +397,11 @@ class Txt2ImgCommand(
         ) -> Unit,
         onError: suspend M.(
             e: Exception,
-                mainParams: Map<String, String>,
-                otherParams: Map<String, String>,
-                warnings: List<String>,
-                controlnetImages: List<Pair<ControlnetUnitParams, String>>,
-                ) -> Unit,
+            mainParams: Map<String, String>,
+            otherParams: Map<String, String>,
+            warnings: List<String>,
+            controlnetImages: List<Pair<ControlnetUnitParams, String>>,
+        ) -> Unit,
         pPrompt: String? = null,
         pNegativePrompt: String? = null,
         pWidth: Int? = null,
@@ -553,13 +554,19 @@ class Txt2ImgCommand(
 
         val initialResponse = setInitialMessage(mainParams, otherParams, warnings, controlnetImages)
 
-        queueInfo.register(isTextGeneration = false) { index ->
+        queueInfo.register(
+            isTextGeneration = false,
+            onIndexChanged = { index ->
+                initialResponse.onProgress(
+                    index,
+                    mainParams,
+                    otherParams,
+                    warnings,
+                    controlnetImages,
+                )
+            },
+        ) {
             try {
-                initialResponse.onProgress(index, mainParams, otherParams, warnings, controlnetImages)
-                if (index != 0) {
-                    return@register
-                }
-
                 if (queueInfo.isTextGenerationActive) {
                     tgClient?.unloadModel()
                 }
@@ -582,7 +589,14 @@ class Txt2ImgCommand(
                     net to extraImages.getOrNull(++imageIndex)
                 }
 
-                initialResponse.onSuccess(outputImages, params.seed, mainParams, otherParams, warnings, controlnetImages)
+                initialResponse.onSuccess(
+                    outputImages,
+                    params.seed,
+                    mainParams,
+                    otherParams,
+                    warnings,
+                    controlnetImages
+                )
 
             } catch (e: Exception) {
                 logger.logInteractionException(e)
@@ -593,10 +607,6 @@ class Txt2ImgCommand(
                     warnings,
                     controlnetImages
                 )
-            } finally {
-                if (index == 0) {
-                    queueInfo.complete()
-                }
             }
         }
     }
@@ -624,7 +634,8 @@ private val CommandsConfig.defaultSteps get() = txt2img.steps?.default ?: global
 private val CommandsConfig.minCfg get() = txt2img.cfg?.min ?: global.cfg.min
 private val CommandsConfig.maxCfg get() = txt2img.cfg?.max ?: global.cfg.max
 private val CommandsConfig.defaultCfg get() = txt2img.cfg?.default ?: global.cfg.default
-private val CommandsConfig.defaultEnableADetailer get() = txt2img.defaultEnableADetailer ?: global.defaultEnableADetailer
+private val CommandsConfig.defaultEnableADetailer
+    get() = txt2img.defaultEnableADetailer ?: global.defaultEnableADetailer
 private val CommandsConfig.minHiresFactor get() = txt2img.hiresFactor.min
 private val CommandsConfig.maxHiresFactor get() = txt2img.hiresFactor.max
 private val CommandsConfig.defaultHiresFactor get() = txt2img.hiresFactor.default

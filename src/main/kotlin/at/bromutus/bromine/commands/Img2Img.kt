@@ -445,65 +445,66 @@ class Img2ImgCommand(
                 controlnetInProgressEmbeds(controlnetImages)
             }
 
-            queueInfo.register(isTextGeneration = false) { index ->
+            queueInfo.register(
+                isTextGeneration = false,
+                onIndexChanged = { index ->
+                    initialResponse.edit {
+                        embeds?.clear()
+                        generationInProgressEmbed(
+                            index = index,
+                            mainParams = mainParams,
+                            otherParams = otherParams,
+                            warnings = warnings,
+                        )
+                        controlnetInProgressEmbeds(controlnetImages)
+                    }
+                },
+            ) {
                 try {
-                    if (index != 0) {
-                        initialResponse.edit {
-                            embeds?.clear()
-                            generationInProgressEmbed(
-                                index = index,
-                                mainParams = mainParams,
-                                otherParams = otherParams,
-                                warnings = warnings,
-                            )
-                            controlnetInProgressEmbeds(controlnetImages)
-                        }
+                    initialResponse.edit {
+                        embeds?.clear()
+                        generationInProgressEmbed(
+                            mainParams = mainParams,
+                            otherParams = otherParams,
+                            warnings = warnings,
+                        )
+                        controlnetInProgressEmbeds(controlnetImages)
+                    }
+                    if (queueInfo.isTextGenerationActive) {
+                        tgClient?.unloadModel()
+                    }
+
+                    val response = client.img2img(params)
+
+                    val images = if (count > 1) {
+                        // The first image is a grid containing all the generated images
+                        // We can remove it
+                        response.images.drop(1)
                     } else {
-                        initialResponse.edit {
-                            embeds?.clear()
-                            generationInProgressEmbed(
-                                mainParams = mainParams,
-                                otherParams = otherParams,
-                                warnings = warnings,
-                            )
-                            controlnetInProgressEmbeds(controlnetImages)
-                        }
-                        if (queueInfo.isTextGenerationActive) {
-                            tgClient?.unloadModel()
-                        }
+                        response.images
+                    }
+                    val outputImages = images.take(count)
+                    val extraImages = images.drop(count)
+                    val controlnetImages = controlnets.mapIndexed { index, net ->
+                        net to extraImages.getOrNull(index)
+                    }
 
-                        val response = client.img2img(params)
-
-                        val images = if (count > 1) {
-                            // The first image is a grid containing all the generated images
-                            // We can remove it
-                            response.images.drop(1)
-                        } else {
-                            response.images
+                    initialResponse.edit {
+                        embeds?.clear()
+                        files.clear()
+                        generationSuccessEmbed(
+                            mainParams = mainParams,
+                            otherParams = otherParams,
+                            warnings = warnings,
+                            thumbnail = thumbnail,
+                            thumbnailExtension = imageExtension,
+                        )
+                        outputImages.forEachIndexed { index, img ->
+                            addFile("${seed + index}.png", ChannelProvider {
+                                ByteReadChannel(Base64.decode(img))
+                            })
                         }
-                        val outputImages = images.take(count)
-                        val extraImages = images.drop(count)
-                        val controlnetImages = controlnets.mapIndexed { index, net ->
-                            net to extraImages.getOrNull(index)
-                        }
-
-                        initialResponse.edit {
-                            embeds?.clear()
-                            files.clear()
-                            generationSuccessEmbed(
-                                mainParams = mainParams,
-                                otherParams = otherParams,
-                                warnings = warnings,
-                                thumbnail = thumbnail,
-                                thumbnailExtension = imageExtension,
-                            )
-                            outputImages.forEachIndexed { index, img ->
-                                addFile("${seed + index}.png", ChannelProvider {
-                                    ByteReadChannel(Base64.decode(img))
-                                })
-                            }
-                            controlnetSuccessEmbeds(controlnetImages)
-                        }
+                        controlnetSuccessEmbeds(controlnetImages)
                     }
                 } catch (e: Exception) {
                     logger.logInteractionException(e)
@@ -518,10 +519,6 @@ class Img2ImgCommand(
                             thumbnailExtension = imageExtension,
                         )
                         controlnetFailureEmbeds(controlnetImages)
-                    }
-                } finally {
-                    if (index == 0) {
-                        queueInfo.complete()
                     }
                 }
             }
@@ -562,6 +559,7 @@ private val CommandsConfig.defaultSteps get() = img2img.steps?.default ?: global
 private val CommandsConfig.minCfg get() = img2img.cfg?.min ?: global.cfg.min
 private val CommandsConfig.maxCfg get() = img2img.cfg?.max ?: global.cfg.max
 private val CommandsConfig.defaultCfg get() = img2img.cfg?.default ?: global.cfg.default
-private val CommandsConfig.defaultEnableADetailer get() = img2img.defaultEnableADetailer ?: global.defaultEnableADetailer
+private val CommandsConfig.defaultEnableADetailer
+    get() = img2img.defaultEnableADetailer ?: global.defaultEnableADetailer
 private val CommandsConfig.displaySourceImageByDefault get() = img2img.displaySourceImageByDefault
 
